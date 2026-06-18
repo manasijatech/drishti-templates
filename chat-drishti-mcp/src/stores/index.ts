@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { resolveModelForProvider } from "~/lib/models";
+import { portfolioToContext } from "~/lib/portfolio-context";
 import {
 	DEFAULT_SUB_AGENT_PREFERENCES,
 	normalizeSubAgentPreferences,
@@ -371,14 +372,4 @@ export const useChatStore = create<ChatStore>()(
 	),
 );
 
-export function portfolioToContext(portfolios: Portfolio[]): string {
-	if (!portfolios.length) return "";
-	return portfolios
-		.map((p) => {
-			const holdings = p.holdings
-				.map((h) => `${h.symbol}: ${h.quantity} @ ₹${h.averagePrice}`)
-				.join(", ");
-			return `${p.name}: ${holdings}`;
-		})
-		.join("\n");
-}
+export { portfolioToContext };

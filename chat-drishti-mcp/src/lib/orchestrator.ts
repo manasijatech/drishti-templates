@@ -162,9 +162,24 @@ export async function runSupervisorChat(
 			enabledSubAgents: enabledAgents,
 		});
 
-		const prompt = conversationContext
-			? `Conversation so far:\n${conversationContext}\n\nLatest user message:\n${userQuery}`
-			: userQuery;
+		const sessionContext = [
+			memoryContext ? `User memory:\n${memoryContext}` : "",
+			portfolioContext
+				? `Configured portfolios for this session:\n${portfolioContext}`
+				: "",
+		]
+			.filter(Boolean)
+			.join("\n\n");
+
+		const prompt = [
+			sessionContext,
+			conversationContext
+				? `Conversation so far:\n${conversationContext}`
+				: "",
+			`Latest user message:\n${userQuery}`,
+		]
+			.filter(Boolean)
+			.join("\n\n");
 
 		logAgentTrace(sessionId, "Supervisor", "run_start");
 

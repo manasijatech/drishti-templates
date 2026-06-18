@@ -168,7 +168,7 @@ export function createSupervisorAgent(
 
 		context?.portfolioContext
 
-			? `User portfolio:\n${context.portfolioContext}`
+			? `Configured user portfolios (from app — NOT from broker APIs):\n${context.portfolioContext}`
 
 			: "",
 
@@ -177,6 +177,24 @@ export function createSupervisorAgent(
 		.filter(Boolean)
 
 		.join("\n\n");
+
+
+
+	const portfolioInstructions = context?.portfolioContext
+
+		? `
+
+Portfolio rules:
+
+- Holdings above are saved in the user's Drishti app. When they name a portfolio (e.g. "Deion", "my portfolio"), match it to a configured name and use those symbols.
+
+- Never claim you cannot look up a named portfolio — read the configured portfolios section above.
+
+- Never ask the user to paste holdings if that portfolio already lists symbols. Use Drishti MCP for live prices and analysis.
+
+- Only ask for holdings if the named portfolio exists but has no symbols saved yet.`
+
+		: "";
 
 
 
@@ -225,10 +243,12 @@ ${mcpPolicy}
 ${routingInstructions}
 
 Workflow:
+0. If the request is not about finance or Indian markets, refuse briefly and stop — do not answer off-topic requests
 1. Understand user intent
 2. Call Drishti MCP tools directly whenever live data is needed
 3. Delegate to an enabled specialist only when extra synthesis helps — never for basic data fetches you can do via MCP
 4. Synthesize a clear, well-structured answer and cite sources when you used tools
+${portfolioInstructions}
 
 ${contextBlock}`.trim(),
 

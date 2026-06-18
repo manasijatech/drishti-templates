@@ -6,13 +6,18 @@ import {
 	Cpu,
 	Eye,
 	EyeSlash,
-	Plus,
 	SlidersHorizontal,
 	Trash,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
-import { Badge } from "~/components/ui/badge";
+import {
+	PortfolioCard,
+	PortfolioCreateForm,
+	PortfolioEmptyState,
+	PortfolioSectionDivider,
+	WatchlistSection,
+} from "~/components/portfolio/portfolio-ui";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -34,8 +39,6 @@ import {
 import { cn } from "~/lib/utils";
 import { useMemoryStore, useModelStore } from "~/stores";
 import type { PortfolioHolding } from "~/types";
-
-type ConfigSectionId = "model" | "preferences" | "portfolio";
 
 function ConfigDropdown({
 	title,
@@ -76,58 +79,8 @@ function ConfigDropdown({
 		</div>
 	);
 }
-function HoldingRow({
-	holding,
-	onChange,
-	onRemove,
-}: {
-	holding: PortfolioHolding;
-	onChange: (h: PortfolioHolding) => void;
-	onRemove: () => void;
-}) {
-	const currentValue = holding.quantity * holding.averagePrice;
-	return (
-		<div className="grid grid-cols-[1fr_56px_72px_64px_32px] items-center gap-1.5">
-			<Input
-				className="h-8 text-xs"
-				onChange={(e) =>
-					onChange({ ...holding, symbol: e.target.value.toUpperCase() })
-				}
-				placeholder="RELIANCE"
-				value={holding.symbol}
-			/>
-			<Input
-				className="h-8 text-xs"
-				min={0}
-				onChange={(e) =>
-					onChange({ ...holding, quantity: Number(e.target.value) || 0 })
-				}
-				placeholder="Qty"
-				type="number"
-				value={holding.quantity || ""}
-			/>
-			<Input
-				className="h-8 text-xs"
-				min={0}
-				onChange={(e) =>
-					onChange({
-						...holding,
-						averagePrice: Number(e.target.value) || 0,
-					})
-				}
-				placeholder="Avg ₹"
-				type="number"
-				value={holding.averagePrice || ""}
-			/>
-			<span className="type-mono-data text-muted-foreground text-xs">
-				₹{currentValue.toLocaleString("en-IN")}
-			</span>
-			<Button className="size-8" onClick={onRemove} size="icon" variant="ghost">
-				<Trash className="size-3.5" />
-			</Button>
-		</div>
-	);
-}
+
+type ConfigSectionId = "model" | "preferences" | "portfolio";
 
 export function ChatConfigPanelContent({
 	focusModelSignal = 0,
@@ -165,12 +118,16 @@ export function ChatConfigPanelContent({
 	const [newPortfolioName, setNewPortfolioName] = useState("");
 	const [newWatchlistName, setNewWatchlistName] = useState("");
 	const [newWatchlistSymbols, setNewWatchlistSymbols] = useState("");
-	const [editingHoldings, setEditingHoldings] = useState<
-		Record<string, PortfolioHolding[]>
-	>({});
 	const [openSection, setOpenSection] = useState<ConfigSectionId | null>(
 		"model",
 	);
+
+	const updatePortfolioHoldings = (
+		portfolioId: string,
+		holdings: PortfolioHolding[],
+	) => {
+		updatePortfolio(portfolioId, { holdings });
+	};
 
 	const toggleSection = (section: ConfigSectionId) => {
 		setOpenSection((current) => (current === section ? null : section));
@@ -230,18 +187,6 @@ export function ChatConfigPanelContent({
 		setShowApiKey(false);
 		setError(null);
 		setSaved(false);
-	};
-
-	const getHoldings = (
-		portfolioId: string,
-		defaultHoldings: PortfolioHolding[],
-	) => editingHoldings[portfolioId] ?? defaultHoldings;
-
-	const saveHoldings = (portfolioId: string) => {
-		const holdings = editingHoldings[portfolioId];
-		if (holdings) {
-			updatePortfolio(portfolioId, { holdings });
-		}
 	};
 
 	return (
@@ -457,186 +402,85 @@ export function ChatConfigPanelContent({
 				title="Portfolio"
 			>
 				<p className="type-body-prose text-xs">
-					Holdings and watchlists shared with the assistant.
+					Holdings and watchlists shared with the assistant. Name a portfolio
+					(e.g. Deion) and add symbols — the agent uses it when you ask by name.
 				</p>
 				<div className="space-y-4">
-					<div className="flex gap-2">
-						<Input
-							className="h-8 text-xs"
-							onChange={(e) => setNewPortfolioName(e.target.value)}
-							placeholder="Portfolio name"
-							value={newPortfolioName}
-						/>
-						<Button
-							className="h-8 shrink-0 text-xs"
-							onClick={() => {
-								if (!newPortfolioName.trim()) return;
-								addPortfolio({
-									name: newPortfolioName.trim(),
-									holdings: [],
-								});
-								setNewPortfolioName("");
-							}}
-							size="sm"
-						>
-							<Plus className="mr-1 size-3.5" />
-							Add
-						</Button>
-					</div>
-
-					{portfolios.map((portfolio) => {
-						const holdings = getHoldings(portfolio.id, portfolio.holdings);
-						const totalInvested = holdings.reduce(
-							(sum, h) => sum + h.quantity * h.averagePrice,
-							0,
-						);
-
-						return (
-							<div
-								className="space-y-2 rounded-lg bg-muted/40 p-3"
-								key={portfolio.id}
-							>
-								<div className="flex items-start justify-between gap-2">
-									<div>
-										<p className="font-medium text-sm">{portfolio.name}</p>
-										<p className="type-mono-data text-muted-foreground text-xs">
-											{holdings.length} holdings · ₹
-											{totalInvested.toLocaleString("en-IN")}
-										</p>
-									</div>
-									<Button
-										className="size-7"
-										onClick={() => removePortfolio(portfolio.id)}
-										size="icon"
-										variant="ghost"
-									>
-										<Trash className="size-3.5" />
-									</Button>
-								</div>
-
-								{holdings.map((holding, idx) => (
-									<HoldingRow
-										holding={holding}
-										key={`${portfolio.id}-${idx}`}
-										onChange={(h) => {
-											const updated = [...holdings];
-											updated[idx] = h;
-											setEditingHoldings((prev) => ({
-												...prev,
-												[portfolio.id]: updated,
-											}));
-										}}
-										onRemove={() => {
-											const updated = holdings.filter((_, i) => i !== idx);
-											setEditingHoldings((prev) => ({
-												...prev,
-												[portfolio.id]: updated,
-											}));
-										}}
-									/>
-								))}
-
-								<div className="flex gap-2">
-									<Button
-										className="h-7 text-xs"
-										onClick={() => {
-											const current = getHoldings(
-												portfolio.id,
-												portfolio.holdings,
-											);
-											setEditingHoldings((prev) => ({
-												...prev,
-												[portfolio.id]: [
-													...current,
-													{ symbol: "", quantity: 0, averagePrice: 0 },
-												],
-											}));
-										}}
-										size="sm"
-										variant="outline"
-									>
-										<Plus className="mr-1 size-3.5" />
-										Holding
-									</Button>
-									<Button
-										className="h-7 text-xs"
-										onClick={() => saveHoldings(portfolio.id)}
-										size="sm"
-									>
-										Save
-									</Button>
-								</div>
-							</div>
-						);
-					})}
+					<PortfolioCreateForm
+						name={newPortfolioName}
+						onNameChange={setNewPortfolioName}
+						onSubmit={() => {
+							if (!newPortfolioName.trim()) return;
+							addPortfolio({
+								name: newPortfolioName.trim(),
+								holdings: [],
+							});
+							setNewPortfolioName("");
+						}}
+						variant="compact"
+					/>
 
 					{portfolios.length === 0 ? (
-						<p className="text-center text-muted-foreground text-xs">
-							No portfolios yet.
-						</p>
-					) : null}
+						<PortfolioEmptyState />
+					) : (
+						<div className="space-y-3">
+							{portfolios.map((portfolio) => {
+								const holdings = portfolio.holdings;
 
-					<div className="space-y-2 pt-1">
-						<p className="font-medium text-foreground text-xs">Watchlists</p>
-						<Input
-							className="h-8 text-xs"
-							onChange={(e) => setNewWatchlistName(e.target.value)}
-							placeholder="Watchlist name"
-							value={newWatchlistName}
-						/>
-						<Input
-							className="h-8 text-xs"
-							onChange={(e) => setNewWatchlistSymbols(e.target.value)}
-							placeholder="TCS, INFY, RELIANCE"
-							value={newWatchlistSymbols}
-						/>
-						<Button
-							className="h-8 w-full text-xs"
-							onClick={() => {
-								if (!newWatchlistName.trim()) return;
-								addWatchlist({
-									name: newWatchlistName.trim(),
-									symbols: newWatchlistSymbols
-										.split(",")
-										.map((s) => s.trim().toUpperCase())
-										.filter(Boolean),
-								});
-								setNewWatchlistName("");
-								setNewWatchlistSymbols("");
-							}}
-							size="sm"
-							variant="outline"
-						>
-							<Plus className="mr-1 size-3.5" />
-							Add watchlist
-						</Button>
+								return (
+									<PortfolioCard
+										autoSave
+										holdings={holdings}
+										key={portfolio.id}
+										onAddHolding={() => {
+											updatePortfolioHoldings(portfolio.id, [
+												...holdings,
+												{ symbol: "", quantity: 0, averagePrice: 0 },
+											]);
+										}}
+										onHoldingChange={(index, holding) => {
+											const updated = [...holdings];
+											updated[index] = holding;
+											updatePortfolioHoldings(portfolio.id, updated);
+										}}
+										onHoldingRemove={(index) => {
+											updatePortfolioHoldings(
+												portfolio.id,
+												holdings.filter((_, i) => i !== index),
+											);
+										}}
+										onRemove={() => removePortfolio(portfolio.id)}
+										portfolio={portfolio}
+										variant="compact"
+									/>
+								);
+							})}
+						</div>
+					)}
 
-						{watchlists.map((wl) => (
-							<div
-								className="flex items-start justify-between gap-2 rounded-lg bg-muted/40 p-3"
-								key={wl.id}
-							>
-								<div>
-									<p className="font-medium text-sm">{wl.name}</p>
-									<div className="mt-1.5 flex flex-wrap gap-1">
-										{wl.symbols.map((sym) => (
-											<Badge className="text-xs" key={sym} variant="secondary">
-												{sym}
-											</Badge>
-										))}
-									</div>
-								</div>
-								<Button
-									className="size-7"
-									onClick={() => removeWatchlist(wl.id)}
-									size="icon"
-									variant="ghost"
-								>
-									<Trash className="size-3.5" />
-								</Button>
-							</div>
-						))}
-					</div>
+					<PortfolioSectionDivider />
+
+					<WatchlistSection
+						newName={newWatchlistName}
+						newSymbols={newWatchlistSymbols}
+						onAdd={() => {
+							if (!newWatchlistName.trim()) return;
+							addWatchlist({
+								name: newWatchlistName.trim(),
+								symbols: newWatchlistSymbols
+									.split(",")
+									.map((s) => s.trim().toUpperCase())
+									.filter(Boolean),
+							});
+							setNewWatchlistName("");
+							setNewWatchlistSymbols("");
+						}}
+						onNameChange={setNewWatchlistName}
+						onRemove={removeWatchlist}
+						onSymbolsChange={setNewWatchlistSymbols}
+						variant="compact"
+						watchlists={watchlists}
+					/>
 				</div>
 			</ConfigDropdown>
 		</div>
