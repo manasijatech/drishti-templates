@@ -1,0 +1,25 @@
+{
+	"mcpServers": {
+		"shadcn": {
+			"command": "npx",
+			"args": ["shadcn@latest", "mcp"]
+		},
+		"agent-elements": {
+			"command": "npx",
+			"args": ["-y", "shadcn@canary", "mcp"],
+			"env": {
+				"REGISTRY_URL": "https://agent-elements.21st.dev/r/index.json"
+			}
+		},
+		"openaiDeveloperDocs": {
+			"url": "https://developers.openai.com/mcp"
+		},
+		"next-devtools": {
+			"command": "npx",
+			"args": ["-y", "next-devtools-mcp@latest"]
+		},
+		"Drishti": {
+			"url": "https://mcp.drishti.manasija.in"
+		}
+	}
+}
