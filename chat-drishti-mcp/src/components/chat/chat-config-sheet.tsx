@@ -38,11 +38,11 @@ export function ChatConfigSheet({
 					<GearSix className="size-4" weight="light" />
 				</SheetTrigger>
 			) : null}
-			<SheetContent className="w-full gap-0 p-0 sm:max-w-md" side="right">
-				<SheetHeader className="border-border border-b px-4 py-3">
+			<SheetContent className="flex w-full min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md" side="right">
+				<SheetHeader className="shrink-0 border-border border-b px-4 py-3">
 					<SheetTitle>Configuration</SheetTitle>
 				</SheetHeader>
-				<ScrollArea className="flex-1">
+				<ScrollArea className="min-h-0 flex-1">
 					<ChatConfigPanelContent
 						apiKeyInputId="chat-llm-provider-token-sheet"
 						focusModelSignal={focusModelSignal}

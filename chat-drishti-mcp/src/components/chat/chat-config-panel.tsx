@@ -493,11 +493,11 @@ export function ChatConfigPanel({
 	focusModelSignal?: number;
 }) {
 	return (
-		<aside className="hidden w-72 shrink-0 flex-col border-border border-l bg-card xl:flex">
-			<div className="border-border border-b px-4 py-3">
+		<aside className="hidden h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-border border-l bg-card xl:flex">
+			<div className="shrink-0 border-border border-b px-4 py-3">
 				<p className="type-eyebrow">Configuration</p>
 			</div>
-			<ScrollArea className="flex-1">
+			<ScrollArea className="min-h-0 flex-1">
 				<ChatConfigPanelContent
 					apiKeyInputId="chat-llm-provider-token-panel"
 					focusModelSignal={focusModelSignal}
