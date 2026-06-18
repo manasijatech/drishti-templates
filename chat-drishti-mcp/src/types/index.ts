@@ -101,6 +101,14 @@ export interface UsageMetrics {
 	estimatedCostUsd: number;
 }
 
+/** Token usage for a single user query (all agent turns combined). */
+export interface QueryUsageMetadata {
+	promptTokens: number;
+	completionTokens: number;
+	totalTokens: number;
+	requests: number;
+}
+
 export interface ChatRequestBody {
 	messages: UIMessage[];
 	modelConfig: ModelConfig;
@@ -108,12 +116,5 @@ export interface ChatRequestBody {
 	memoryContext?: string;
 	portfolioContext?: string;
 	enabledSubAgents?: SubAgentId[];
-}
-
-export interface ComplianceSection {
-	bullCase: string;
-	bearCase: string;
-	risks: string;
-	sources: string[];
 }
 

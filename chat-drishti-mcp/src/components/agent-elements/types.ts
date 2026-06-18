@@ -163,6 +163,9 @@ export type AgentChatProps = {
   /** Read-only model label in the input toolbar */
   modelBadge?: string;
 
+  /** Extra controls rendered to the right of the input toolbar */
+  inputRightActions?: React.ReactNode;
+
   /** Disable the input (e.g. missing API key) */
   inputDisabled?: boolean;
 

@@ -18,12 +18,18 @@ import { SearchTool } from "~/components/agent-elements/tools/search-tool";
 import { ThinkingTool } from "~/components/agent-elements/tools/thinking-tool";
 import { TodoTool } from "~/components/agent-elements/tools/todo-tool";
 import type { AgentChatProps } from "~/components/agent-elements/types";
+import { DrishtiLoader } from "~/components/brand/drishti-loader";
 import { ChatConfigPanel } from "~/components/chat/chat-config-panel";
 import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
+import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
+import { QueryCostMenu } from "~/components/chat/query-cost-menu";
 import { Button } from "~/components/ui/button";
-import { COMPLIANCE_DISCLAIMER } from "~/lib/compliance";
 import { getModelDisplayName } from "~/lib/openrouter-models-core";
+import {
+	getLastQueryUsageFromMessages,
+	sumQueryUsageFromMessages,
+} from "~/lib/query-usage-message";
 import { getEnabledSubAgentIds, normalizeSubAgentPreferences } from "~/lib/sub-agents";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import {
@@ -227,6 +233,15 @@ export function MarketChat() {
 		[activeProvider, activeModel, catalogModels],
 	);
 
+	const lastQueryUsage = useMemo(
+		() => getLastQueryUsageFromMessages(messages),
+		[messages],
+	);
+	const sessionQueryUsage = useMemo(
+		() => sumQueryUsageFromMessages(messages),
+		[messages],
+	);
+
 	const showSidebarSuggestions = messages.length === 0;
 	const openModelConfig = useCallback(() => {
 		if (typeof window !== "undefined" && window.innerWidth < 1280) {
@@ -262,6 +277,10 @@ export function MarketChat() {
 				}
 			: undefined;
 
+	if (!storeHydrated) {
+		return <ChatShellSkeleton />;
+	}
+
 	return (
 		<div className="flex h-screen flex-col">
 			<div className="flex flex-1 overflow-hidden">
@@ -294,9 +313,7 @@ export function MarketChat() {
 						/>
 					</div>
 					{!configReady ? (
-						<div className="flex flex-1 items-center justify-center text-muted-foreground">
-							Loading configuration...
-						</div>
+						<DrishtiLoader fullscreen label="Loading configuration" />
 					) : (
 						<AgentChat
 							className="flex-1"
@@ -307,6 +324,18 @@ export function MarketChat() {
 							error={error ?? undefined}
 							infoBar={inputInfoBar}
 							inputDisabled={!canChat}
+							inputRightActions={
+								<QueryCostMenu
+									catalogModels={catalogModels}
+									isStreaming={
+										status === "streaming" || status === "submitted"
+									}
+									lastQueryUsage={lastQueryUsage}
+									modelId={activeModel}
+									provider={activeProvider}
+									sessionUsage={sessionQueryUsage}
+								/>
+							}
 							modelBadge={modelBadgeLabel}
 							messages={messages}
 							onSend={handleSend}
@@ -325,9 +354,6 @@ export function MarketChat() {
 				<ChatConfigPanel focusModelSignal={focusPanelSignal} />
 			</div>
 
-			<footer className="border-border border-t bg-card px-4 py-2.5 text-center">
-				<p className="type-body-prose text-xs">{COMPLIANCE_DISCLAIMER}</p>
-			</footer>
 		</div>
 	);
 }

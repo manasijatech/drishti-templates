@@ -1,8 +1,9 @@
 import { run, type RunStreamEvent } from "@openai/agents";
 import {
-	createAiSdkUiMessageStreamResponse,
+	createAiSdkUiMessageStream,
 	type AiSdkUiMessageStreamSource,
 } from "@openai/agents-extensions/ai-sdk-ui";
+import { createUIMessageStreamResponse } from "ai";
 import type { UIMessage } from "ai";
 import {
 	createMarketAnalystAgent,
@@ -11,11 +12,15 @@ import {
 	createResearchAgent,
 	createSupervisorAgent,
 } from "~/agents";
-import { logAgentTrace, logToolExecution } from "~/lib/observability";
+import {
+	logAgentTrace,
+	logToolExecution,
+	recordUsage,
+} from "~/lib/observability";
 import { connectMarketDataServers } from "~/mcp/registry";
 import { createAgentModel } from "~/providers";
 import { getEnabledSubAgentIds, normalizeSubAgentPreferences } from "~/lib/sub-agents";
-import type { ChatRequestBody, SubAgentId } from "~/types";
+import type { ChatRequestBody, QueryUsageMetadata, SubAgentId } from "~/types";
 
 function extractTextFromMessages(messages: UIMessage[]): string {
 	const lastUser = [...messages].reverse().find((m) => m.role === "user");
@@ -58,6 +63,59 @@ function logRunStreamEvent(sessionId: string, event: RunStreamEvent) {
 	if (event.name === "handoff_occurred") {
 		logAgentTrace(sessionId, "Supervisor", "handoff");
 	}
+}
+
+function toQueryUsageMetadata(runResult: {
+	runContext: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
+}): QueryUsageMetadata | null {
+	const usage = runResult.runContext.usage;
+	if (usage.totalTokens <= 0 && usage.requests <= 0) return null;
+
+	return {
+		promptTokens: usage.inputTokens,
+		completionTokens: usage.outputTokens,
+		totalTokens: usage.totalTokens,
+		requests: usage.requests,
+	};
+}
+
+function appendQueryUsageToUiStream(
+	uiStream: ReadableStream,
+	runResult: {
+		completed: Promise<void>;
+		runContext: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
+	},
+): ReadableStream {
+	const reader = uiStream.getReader();
+
+	return new ReadableStream({
+		async start(controller) {
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					controller.enqueue(value);
+				}
+
+				await runResult.completed.catch(() => undefined);
+
+				const queryUsage = toQueryUsageMetadata(runResult);
+				if (queryUsage) {
+					controller.enqueue({
+						type: "message-metadata",
+						messageMetadata: { queryUsage },
+					});
+				}
+
+				controller.close();
+			} catch (error) {
+				controller.error(error);
+			}
+		},
+		cancel() {
+			void reader.cancel();
+		},
+	});
 }
 
 export async function runSupervisorChat(
@@ -134,11 +192,33 @@ export async function runSupervisorChat(
 			},
 		} as AiSdkUiMessageStreamSource;
 
-		const response = createAiSdkUiMessageStreamResponse(observedStreamSource, {
+		const uiStream = createAiSdkUiMessageStream(observedStreamSource);
+		const streamWithUsage = appendQueryUsageToUiStream(uiStream, runResult);
+
+		const response = createUIMessageStreamResponse({
+			stream: streamWithUsage,
 			headers: {
 				"X-Session-Id": sessionId,
 			},
 		});
+
+		void runResult.completed
+			.then(() => {
+				const queryUsage = toQueryUsageMetadata(runResult);
+				if (!queryUsage) return;
+				recordUsage(sessionId, {
+					promptTokens: queryUsage.promptTokens,
+					completionTokens: queryUsage.completionTokens,
+					totalTokens: queryUsage.totalTokens,
+				});
+				logAgentTrace(
+					sessionId,
+					"Supervisor",
+					"usage",
+					`${queryUsage.totalTokens} tokens`,
+				);
+			})
+			.catch(() => undefined);
 
 		return { response, cleanup: () => mcpServers.close() };
 	} catch (error) {

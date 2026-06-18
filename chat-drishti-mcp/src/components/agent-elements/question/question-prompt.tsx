@@ -270,6 +270,12 @@ export function QuestionPrompt({
                   placeholder={
                     activeQuestion.customPlaceholder ?? "Type your answer"
                   }
+                  name="question-answer"
+                  autoComplete="off"
+                  data-1p-ignore=""
+                  data-bwignore=""
+                  data-form-type="other"
+                  data-lpignore="true"
                   className="w-full h-7 rounded-md border border-border bg-background px-2 text-sm text-an-tool-color"
                 />
               </div>
@@ -283,6 +289,12 @@ export function QuestionPrompt({
           onChange={(event) => setTextValue(event.target.value)}
           placeholder={activeQuestion.placeholder ?? "Type your answer"}
           rows={3}
+          name="question-answer"
+          autoComplete="off"
+          data-1p-ignore=""
+          data-bwignore=""
+          data-form-type="other"
+          data-lpignore="true"
           className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-an-tool-color resize-y"
         />
       )}

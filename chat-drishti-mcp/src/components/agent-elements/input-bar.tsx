@@ -527,6 +527,12 @@ export const InputBar = memo(function InputBar({
                     placeholder={effectivePlaceholder}
                     disabled={disabled}
                     rows={1}
+                    name="chat-message"
+                    autoComplete="off"
+                    data-1p-ignore=""
+                    data-bwignore=""
+                    data-form-type="other"
+                    data-lpignore="true"
                     className={cn(
                       "peer w-full resize-none bg-transparent border-0 outline-none text-[14px] leading-[1.6] text-an-foreground placeholder:text-an-input-placeholder-color",
                       "overflow-hidden",

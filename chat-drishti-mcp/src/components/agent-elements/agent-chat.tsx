@@ -23,6 +23,7 @@ export function AgentChat({
   suggestions,
   placeholder = "Send a message...",
   modelBadge,
+  inputRightActions,
   inputDisabled = false,
   infoBar,
   emptyStatePosition = "default",
@@ -89,6 +90,7 @@ export function AgentChat({
       disabled={inputDisabled}
       infoBar={infoBar}
       modelBadge={modelBadge}
+      rightActions={inputRightActions}
       className={cn(classNames?.inputBar, isCenteredEmptyState && "px-0 pb-0")}
       onAttach={attachments?.onAttach}
       attachedImages={attachments?.images}

@@ -15,6 +15,7 @@ export type McpToolProps = {
 const PRIORITY_ARGS = [
   "query",
   "question",
+  "symbol",
   "email",
   "name",
   "id",
@@ -93,14 +94,36 @@ function getCompletedTitle(info: McpToolInfo): string {
     : info.displayName;
 }
 
-function formatMcpArgs(input: any): string {
-  if (!input || typeof input !== "object") return "";
-  const entries = Object.entries(input).filter(
-    ([, v]) => v !== undefined && v !== null && v !== "",
-  );
-  if (entries.length === 0) return "";
+const INPUT_LABELS: Record<string, string> = {
+  query: "Query",
+  question: "Question",
+  symbol: "Symbol",
+  email: "Email",
+  name: "Name",
+  id: "ID",
+  customer: "Customer",
+  url: "URL",
+  issue: "Issue",
+  body: "Body",
+  summary: "Summary",
+  title: "Title",
+};
 
-  const sorted = [...entries].sort(([a], [b]) => {
+type PrimaryInput = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+function getInputEntries(input: unknown): [string, unknown][] {
+  if (!input || typeof input !== "object") return [];
+  return Object.entries(input).filter(
+    ([, value]) => value !== undefined && value !== null && value !== "",
+  );
+}
+
+function sortInputEntries(entries: [string, unknown][]): [string, unknown][] {
+  return [...entries].sort(([a], [b]) => {
     const ai = PRIORITY_ARGS.indexOf(a);
     const bi = PRIORITY_ARGS.indexOf(b);
     if (ai !== -1 && bi !== -1) return ai - bi;
@@ -108,15 +131,66 @@ function formatMcpArgs(input: any): string {
     if (bi !== -1) return 1;
     return 0;
   });
+}
+
+function stringifyInputValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+export function extractPrimaryInput(input: unknown): PrimaryInput | null {
+  const entries = sortInputEntries(getInputEntries(input));
+  if (entries.length === 0) return null;
+
+  const [key, value] = entries[0]!;
+  return {
+    key,
+    label: INPUT_LABELS[key] ?? key.replace(/_/g, " "),
+    value: stringifyInputValue(value),
+  };
+}
+
+function formatMcpArgs(input: any): string {
+  const primary = extractPrimaryInput(input);
+  if (primary) {
+    const display =
+      primary.value.length > 50
+        ? `${primary.value.slice(0, 47)}...`
+        : primary.value;
+    return display;
+  }
+
+  const entries = sortInputEntries(getInputEntries(input));
+  if (entries.length === 0) return "";
 
   const parts: string[] = [];
-  for (const [key, value] of sorted) {
+  for (const [key, value] of entries) {
     if (parts.length >= 2) break;
-    const val = typeof value === "string" ? value : JSON.stringify(value);
-    const display = val.length > 30 ? val.slice(0, 27) + "..." : val;
+    const val = stringifyInputValue(value);
+    const display = val.length > 30 ? `${val.slice(0, 27)}...` : val;
     parts.push(`${key}: ${display}`);
   }
   return parts.join("  ");
+}
+
+function formatInputForDisplay(input: unknown): string | null {
+  const entries = getInputEntries(input);
+  if (entries.length === 0) return null;
+  const text = JSON.stringify(Object.fromEntries(entries), null, 2);
+  return text.length > 3000 ? `${text.slice(0, 3000)}\n...` : text;
+}
+
+function shouldShowFullInputJson(
+  input: unknown,
+  primary: PrimaryInput | null,
+): boolean {
+  const entries = getInputEntries(input);
+  if (entries.length === 0) return false;
+  if (!primary) return true;
+  if (entries.length > 1) return true;
+  const [onlyValue] = entries[0] ?? [];
+  if (onlyValue !== primary.key) return true;
+  return primary.value.length > 120 || primary.value.includes("\n");
 }
 
 export function unwrapMcpOutput(output: any): any {
@@ -185,10 +259,30 @@ export const McpTool = memo(function McpTool({
     return getCompletedTitle(mcpInfo);
   }, [part.state, isPending, mcpInfo]);
 
+  const primaryInput = useMemo(
+    () => extractPrimaryInput(part.input),
+    [part.input],
+  );
+
   const subtitle = useMemo(() => {
     if (part.state === "input-streaming") return "";
     return formatMcpArgs(part.input);
   }, [part.input, part.state]);
+
+  const inputJson = useMemo(
+    () => formatInputForDisplay(part.input),
+    [part.input],
+  );
+
+  const showFullInputJson = useMemo(
+    () => shouldShowFullInputJson(part.input, primaryInput),
+    [part.input, primaryInput],
+  );
+
+  const inputCodeBlock = useMemo(() => {
+    if (!inputJson || !showFullInputJson) return null;
+    return `\`\`\`json\n${inputJson}\n\`\`\``;
+  }, [inputJson, showFullInputJson]);
 
   const displayOutput = useMemo(() => {
     if (!part.output) return null;
@@ -204,7 +298,7 @@ export const McpTool = memo(function McpTool({
     return `\`\`\`${language}\n${displayOutput}\n\`\`\``;
   }, [displayOutput]);
 
-  const hasExpandableContent = !!codeBlock && !isPending;
+  const hasExpandableContent = !!(inputJson || codeBlock);
 
   if (isInterrupted && !part.output) {
     return (
@@ -225,11 +319,44 @@ export const McpTool = memo(function McpTool({
         expandable={hasExpandableContent}
         defaultOpen={defaultOpen}
       >
-        {codeBlock && (
-          <div className="an-markdown text-[12px]">
-            <Streamdown plugins={{ code }} controls={{ code: false }}>
-              {codeBlock}
-            </Streamdown>
+        {(primaryInput || inputCodeBlock || codeBlock) && (
+          <div className="rounded-an-tool-border-radius overflow-hidden border border-border bg-an-tool-background">
+            {primaryInput && (
+              <div className="flex min-h-7 items-center gap-1 border-an-tool-border-color border-b px-2.5 py-1 text-xs">
+                <span className="shrink-0 font-medium text-foreground">
+                  {primaryInput.label}
+                </span>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  &ldquo;{primaryInput.value}&rdquo;
+                </span>
+              </div>
+            )}
+            {!primaryInput && inputJson && (
+              <div className="flex min-h-7 items-center border-an-tool-border-color border-b px-2.5 py-1 text-xs">
+                <span className="font-medium text-foreground">Input</span>
+              </div>
+            )}
+            {inputCodeBlock && (
+              <div className="an-markdown border-an-tool-border-color border-b px-2 py-1.5 text-[12px] last:border-b-0">
+                <Streamdown plugins={{ code }} controls={{ code: false }}>
+                  {inputCodeBlock}
+                </Streamdown>
+              </div>
+            )}
+            {codeBlock && (
+              <>
+                {inputJson && (
+                  <div className="flex min-h-7 items-center border-an-tool-border-color border-b px-2.5 py-1 text-xs">
+                    <span className="font-medium text-foreground">Result</span>
+                  </div>
+                )}
+                <div className="an-markdown px-2 py-1.5 text-[12px]">
+                  <Streamdown plugins={{ code }} controls={{ code: false }}>
+                    {codeBlock}
+                  </Streamdown>
+                </div>
+              </>
+            )}
           </div>
         )}
       </ToolRowBase>

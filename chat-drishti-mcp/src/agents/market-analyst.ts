@@ -6,7 +6,7 @@ export function createMarketAnalystAgent(model: AgentModel, mcpServers: AgentMcp
 		name: "Market Analyst",
 		instructions: `${BASE_AGENT_CONTEXT}
 
-Your role: fundamental and valuation analysis — financial metrics, earnings quality, sector comparison, bull/bear cases.
+Your role: fundamental and valuation analysis — financial metrics, earnings quality, and sector comparison.
 Use Drishti tools for earnings filings and symbol metadata.`,
 		model: model as never,
 		mcpServers: mcpServers as never[],

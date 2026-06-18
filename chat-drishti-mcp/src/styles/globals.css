@@ -164,3 +164,124 @@
 		font-variant-numeric: tabular-nums;
 	}
 }
+
+/* ───────────────────────── Skeleton + brand loader ───────────────────────── */
+
+@keyframes drishti-skeleton-sweep {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@keyframes drishti-breathe {
+	0%,
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+	50% {
+		transform: scale(1.06);
+		opacity: 0.94;
+	}
+}
+
+@keyframes drishti-ring {
+	0% {
+		transform: scale(0.75);
+		opacity: 0.5;
+	}
+	70% {
+		opacity: 0;
+	}
+	100% {
+		transform: scale(1.9);
+		opacity: 0;
+	}
+}
+
+@keyframes drishti-sweep {
+	0% {
+		transform: translateX(-130%) skewX(-12deg);
+	}
+	100% {
+		transform: translateX(130%) skewX(-12deg);
+	}
+}
+
+@keyframes drishti-fade-pulse {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+@keyframes drishti-track {
+	0% {
+		transform: translateX(-100%);
+	}
+	100% {
+		transform: translateX(300%);
+	}
+}
+
+@layer utilities {
+	.drishti-skeleton {
+		position: relative;
+		overflow: hidden;
+		background-color: color-mix(in oklab, var(--muted) 88%, var(--foreground) 12%);
+		background-image: linear-gradient(
+			90deg,
+			transparent 0%,
+			color-mix(in oklab, var(--card) 70%, transparent) 45%,
+			color-mix(in oklab, var(--card) 88%, transparent) 50%,
+			color-mix(in oklab, var(--card) 70%, transparent) 55%,
+			transparent 100%
+		);
+		background-size: 200% 100%;
+		background-repeat: no-repeat;
+		animation: drishti-skeleton-sweep 1.6s ease-in-out infinite;
+	}
+
+	.drishti-loader-logo {
+		animation: drishti-breathe 2.4s ease-in-out infinite;
+		will-change: transform, opacity;
+	}
+
+	.drishti-loader-ring {
+		animation: drishti-ring 2.4s ease-out infinite;
+		will-change: transform, opacity;
+	}
+
+	.drishti-loader-wordmark {
+		animation: drishti-fade-pulse 2.4s ease-in-out infinite;
+	}
+
+	.drishti-loader-sweep {
+		animation: drishti-sweep 2.2s ease-in-out infinite;
+		mix-blend-mode: screen;
+	}
+
+	.drishti-loader-track {
+		animation: drishti-track 1.5s ease-in-out infinite;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.drishti-skeleton,
+	.drishti-loader-logo,
+	.drishti-loader-ring,
+	.drishti-loader-wordmark,
+	.drishti-loader-sweep,
+	.drishti-loader-track {
+		animation: none;
+	}
+	.drishti-skeleton {
+		background-image: none;
+	}
+}

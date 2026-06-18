@@ -9,7 +9,6 @@ Agentic chat application for Indian equities powered by the OpenAI Agents SDK, D
 - **Bring your own model** — OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, Ollama
 - **Agent Elements UI** — Streaming chat with tool execution visibility
 - **Portfolio & watchlists** — Local storage with agent context injection
-- **Compliance** — Bull/bear cases, risks, and educational disclaimers on every analysis
 
 ## Quick start
 
@@ -38,7 +37,7 @@ src/
 ├── mcp/             # Drishti MCP integration
 ├── providers/       # BYOM model adapters (AI SDK)
 ├── stores/          # Zustand (chat, memory, model config)
-├── lib/             # Orchestrator, compliance, observability
+├── lib/             # Orchestrator, guardrails, observability
 └── app/
     ├── chat/        # Main chat UI
     ├── portfolio/   # Holdings & watchlists
@@ -70,7 +69,3 @@ Connect Drishti MCP in Cursor via `.cursor/mcp.json`:
 ```
 
 Docs: [drishti.manasija.in/docs/guides/drishti-mcp](https://drishti.manasija.in/docs/guides/drishti-mcp)
-
-## Disclaimer
-
-Educational analysis only. Not financial advice.

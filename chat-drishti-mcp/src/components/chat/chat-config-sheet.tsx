@@ -44,7 +44,7 @@ export function ChatConfigSheet({
 				</SheetHeader>
 				<ScrollArea className="flex-1">
 					<ChatConfigPanelContent
-						apiKeyInputId="chat-apiKey-sheet"
+						apiKeyInputId="chat-llm-provider-token-sheet"
 						focusModelSignal={focusModelSignal}
 					/>
 				</ScrollArea>

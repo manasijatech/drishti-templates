@@ -1,7 +1,5 @@
 import { Agent } from "@openai/agents";
 
-import { COMPLIANCE_INSTRUCTIONS } from "~/lib/compliance";
-
 import { SUB_AGENT_OPTIONS } from "~/lib/sub-agents";
 
 import type { SubAgentId } from "~/types";
@@ -220,35 +218,17 @@ export function createSupervisorAgent(
 
 		instructions: `${BASE_AGENT_CONTEXT}
 
-
-
-${COMPLIANCE_INSTRUCTIONS}
-
-
-
-You are the supervisor orchestrating Indian stock market research.
-
-
+You are the supervisor orchestrating market research with Drishti MCP.
 
 ${mcpPolicy}
 
-
-
 ${routingInstructions}
 
-
-
 Workflow:
-
 1. Understand user intent
-
 2. Call Drishti MCP tools directly whenever live data is needed
-
 3. Delegate to an enabled specialist only when extra synthesis helps — never for basic data fetches you can do via MCP
-
-4. Synthesize a clear, well-structured answer with bull case, bear case, risks, and sources
-
-
+4. Synthesize a clear, well-structured answer and cite sources when you used tools
 
 ${contextBlock}`.trim(),
 

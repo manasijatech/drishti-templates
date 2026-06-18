@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
 import {
 	CaretRight,
 	ChartPieSlice,
 	Cpu,
+	Eye,
+	EyeSlash,
 	Plus,
 	SlidersHorizontal,
 	Trash,
 } from "@phosphor-icons/react";
+import { type ReactNode, useEffect, useState } from "react";
+import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Switch } from "~/components/ui/switch";
 import {
 	Select,
 	SelectContent,
@@ -22,12 +24,15 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "~/components/ui/select";
-import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
+import { Switch } from "~/components/ui/switch";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
-import { cn } from "~/lib/utils";
-import { SUB_AGENT_OPTIONS, normalizeSubAgentPreferences } from "~/lib/sub-agents";
-import { useMemoryStore, useModelStore } from "~/stores";
 import { isValidModelForProvider } from "~/lib/models";
+import {
+	normalizeSubAgentPreferences,
+	SUB_AGENT_OPTIONS,
+} from "~/lib/sub-agents";
+import { cn } from "~/lib/utils";
+import { useMemoryStore, useModelStore } from "~/stores";
 import type { PortfolioHolding } from "~/types";
 
 type ConfigSectionId = "model" | "preferences" | "portfolio";
@@ -52,8 +57,13 @@ function ConfigDropdown({
 				onClick={onToggle}
 				type="button"
 			>
-				<Icon className="size-4 shrink-0 text-muted-foreground" weight="light" />
-				<span className="flex-1 font-medium text-foreground text-sm">{title}</span>
+				<Icon
+					className="size-4 shrink-0 text-muted-foreground"
+					weight="light"
+				/>
+				<span className="flex-1 font-medium text-foreground text-sm">
+					{title}
+				</span>
 				<CaretRight
 					className={cn(
 						"size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
@@ -121,7 +131,7 @@ function HoldingRow({
 
 export function ChatConfigPanelContent({
 	focusModelSignal = 0,
-	apiKeyInputId = "chat-apiKey",
+	apiKeyInputId = "chat-llm-provider-token",
 }: {
 	focusModelSignal?: number;
 	apiKeyInputId?: string;
@@ -132,6 +142,7 @@ export function ChatConfigPanelContent({
 		setActiveModel,
 		setActiveProvider,
 		saveConfig,
+		removeApiKey,
 		configs,
 	} = useModelStore();
 	const {
@@ -147,6 +158,7 @@ export function ChatConfigPanelContent({
 	} = useMemoryStore();
 
 	const [apiKey, setApiKey] = useState("");
+	const [showApiKey, setShowApiKey] = useState(false);
 	const [baseUrl, setBaseUrl] = useState("");
 	const [saved, setSaved] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -156,7 +168,9 @@ export function ChatConfigPanelContent({
 	const [editingHoldings, setEditingHoldings] = useState<
 		Record<string, PortfolioHolding[]>
 	>({});
-	const [openSection, setOpenSection] = useState<ConfigSectionId | null>("model");
+	const [openSection, setOpenSection] = useState<ConfigSectionId | null>(
+		"model",
+	);
 
 	const toggleSection = (section: ConfigSectionId) => {
 		setOpenSection((current) => (current === section ? null : section));
@@ -210,8 +224,18 @@ export function ChatConfigPanelContent({
 		}
 	};
 
-	const getHoldings = (portfolioId: string, defaultHoldings: PortfolioHolding[]) =>
-		editingHoldings[portfolioId] ?? defaultHoldings;
+	const handleRemoveKey = () => {
+		removeApiKey(activeProvider);
+		setApiKey("");
+		setShowApiKey(false);
+		setError(null);
+		setSaved(false);
+	};
+
+	const getHoldings = (
+		portfolioId: string,
+		defaultHoldings: PortfolioHolding[],
+	) => editingHoldings[portfolioId] ?? defaultHoldings;
 
 	const saveHoldings = (portfolioId: string) => {
 		const holdings = editingHoldings[portfolioId];
@@ -229,8 +253,8 @@ export function ChatConfigPanelContent({
 				title="Model"
 			>
 				<p className="type-body-prose text-xs">
-					Provider, model, and API key. Keys are encrypted server-side and stored
-					locally as ciphertext.
+					Provider, model, and API key. Keys are encrypted server-side and
+					stored locally as ciphertext.
 				</p>
 				<div className="space-y-3">
 					<ProviderSelect
@@ -255,22 +279,58 @@ export function ChatConfigPanelContent({
 					<div className="space-y-1.5">
 						<Label className="text-xs" htmlFor={apiKeyInputId}>
 							API Key
-							{existingConfig ? (
+							{existingConfig?.encryptedApiKey ? (
 								<span className="ml-1.5 text-emerald-600 text-xs">(saved)</span>
 							) : null}
 						</Label>
-						<Input
-							className="h-8 text-xs"
-							id={apiKeyInputId}
-							onChange={(e) => setApiKey(e.target.value)}
-							placeholder={
-								activeProvider === "ollama"
-									? "Optional for local Ollama"
-									: "Enter API key"
-							}
-							type="password"
-							value={apiKey}
-						/>
+						<div className="relative">
+							<Input
+								className="h-8 pr-16 text-xs"
+								id={apiKeyInputId}
+								name="llm-provider-token"
+								onChange={(e) => setApiKey(e.target.value)}
+								placeholder={
+									activeProvider === "ollama"
+										? "Optional for local Ollama"
+										: existingConfig?.encryptedApiKey
+											? "••••••••  (saved)"
+											: "Enter API key"
+								}
+								type={showApiKey ? "text" : "password"}
+								value={apiKey}
+							/>
+							<div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
+								<Button
+									aria-label={showApiKey ? "Hide API key" : "Show API key"}
+									className="size-6 text-muted-foreground hover:text-foreground"
+									disabled={!apiKey}
+									onClick={() => setShowApiKey((v) => !v)}
+									size="icon"
+									title={showApiKey ? "Hide" : "Show"}
+									type="button"
+									variant="ghost"
+								>
+									{showApiKey ? (
+										<EyeSlash className="size-3.5" weight="regular" />
+									) : (
+										<Eye className="size-3.5" weight="regular" />
+									)}
+								</Button>
+								{existingConfig?.encryptedApiKey || apiKey ? (
+									<Button
+										aria-label="Delete API key"
+										className="size-6 text-muted-foreground hover:text-destructive"
+										onClick={handleRemoveKey}
+										size="icon"
+										title="Delete saved key"
+										type="button"
+										variant="ghost"
+									>
+										<Trash className="size-3.5" weight="regular" />
+									</Button>
+								) : null}
+							</div>
+						</div>
 					</div>
 
 					{(activeProvider === "openrouter" || activeProvider === "ollama") && (
@@ -595,7 +655,7 @@ export function ChatConfigPanel({
 			</div>
 			<ScrollArea className="flex-1">
 				<ChatConfigPanelContent
-					apiKeyInputId="chat-apiKey-panel"
+					apiKeyInputId="chat-llm-provider-token-panel"
 					focusModelSignal={focusModelSignal}
 				/>
 			</ScrollArea>

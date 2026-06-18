@@ -120,7 +120,7 @@ export function SettingsPage() {
 							<Separator />
 
 							<div className="space-y-2">
-								<Label htmlFor="apiKey">
+								<Label htmlFor="llm-provider-token">
 									API Key
 									{existingConfig && (
 										<span className="ml-2 text-emerald-600 text-xs">
@@ -129,7 +129,8 @@ export function SettingsPage() {
 									)}
 								</Label>
 								<Input
-									id="apiKey"
+									id="llm-provider-token"
+									name="llm-provider-token"
 									onChange={(e) => setApiKey(e.target.value)}
 									placeholder={
 										activeProvider === "ollama"

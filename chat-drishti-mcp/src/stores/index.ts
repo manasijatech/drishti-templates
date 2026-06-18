@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { resolveModelForProvider } from "~/lib/models";
+import {
+	DEFAULT_SUB_AGENT_PREFERENCES,
+	normalizeSubAgentPreferences,
+} from "~/lib/sub-agents";
 import type {
 	ChatSession,
 	EncryptedModelConfig,
@@ -10,11 +15,6 @@ import type {
 	UserPreferences,
 	Watchlist,
 } from "~/types";
-import { resolveModelForProvider } from "~/lib/models";
-import {
-	DEFAULT_SUB_AGENT_PREFERENCES,
-	normalizeSubAgentPreferences,
-} from "~/lib/sub-agents";
 
 async function encryptApiKeyViaServer(apiKey: string) {
 	const response = await fetch("/api/model-config/encrypt", {
@@ -37,7 +37,11 @@ function sanitizeStoredModelConfig(
 	config: EncryptedModelConfig,
 ): EncryptedModelConfig {
 	if (config.provider !== "openrouter") return config;
-	const model = resolveModelForProvider("openrouter", config.model, config.model);
+	const model = resolveModelForProvider(
+		"openrouter",
+		config.model,
+		config.model,
+	);
 	return { ...config, model };
 }
 
@@ -48,6 +52,7 @@ interface ModelStore {
 	setActiveModel: (provider: ModelProviderId, model: string) => void;
 	setActiveProvider: (provider: ModelProviderId) => void;
 	saveConfig: (config: ModelConfig) => Promise<void>;
+	removeApiKey: (provider: ModelProviderId) => void;
 	getActiveEncryptedConfig: () => EncryptedModelConfig | null;
 	hasStoredApiKey: (provider?: ModelProviderId) => boolean;
 }
@@ -109,6 +114,13 @@ export const useModelStore = create<ModelStore>()(
 				});
 			},
 
+			removeApiKey: (provider) =>
+				set((state) => ({
+					configs: state.configs.map((c) =>
+						c.provider === provider ? { ...c, encryptedApiKey: "", iv: "" } : c,
+					),
+				})),
+
 			getActiveEncryptedConfig: () => {
 				const { activeProvider, activeModel } = get();
 				const entry = get().configs.find((c) => c.provider === activeProvider);
@@ -145,7 +157,9 @@ interface MemoryStore extends LongTermMemory {
 	updatePreferences: (prefs: Partial<UserPreferences>) => void;
 	addWatchlist: (watchlist: Omit<Watchlist, "id" | "createdAt">) => void;
 	removeWatchlist: (id: string) => void;
-	addPortfolio: (portfolio: Omit<Portfolio, "id" | "createdAt" | "updatedAt">) => void;
+	addPortfolio: (
+		portfolio: Omit<Portfolio, "id" | "createdAt" | "updatedAt">,
+	) => void;
 	updatePortfolio: (id: string, portfolio: Partial<Portfolio>) => void;
 	removePortfolio: (id: string) => void;
 	toContextString: () => string;
@@ -321,7 +335,7 @@ export const useChatStore = create<ChatStore>()(
 					return {
 						sessions: remaining,
 						activeSessionId: wasActive
-							? remaining[0]?.id ?? crypto.randomUUID()
+							? (remaining[0]?.id ?? crypto.randomUUID())
 							: state.activeSessionId,
 					};
 				}),
@@ -362,10 +376,7 @@ export function portfolioToContext(portfolios: Portfolio[]): string {
 	return portfolios
 		.map((p) => {
 			const holdings = p.holdings
-				.map(
-					(h) =>
-						`${h.symbol}: ${h.quantity} @ ₹${h.averagePrice}`,
-				)
+				.map((h) => `${h.symbol}: ${h.quantity} @ ₹${h.averagePrice}`)
 				.join(", ");
 			return `${p.name}: ${holdings}`;
 		})
