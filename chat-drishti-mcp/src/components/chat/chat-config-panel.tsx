@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
+import { ModelComparePicker } from "~/components/chat/model-compare-picker";
 import {
 	PortfolioCard,
 	PortfolioCreateForm,
@@ -22,13 +23,6 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import { isValidModelForProvider } from "~/lib/models";
@@ -221,6 +215,8 @@ export function ChatConfigPanelContent({
 						/>
 					</div>
 
+					<ModelComparePicker compact provider={activeProvider} />
+
 					<div className="space-y-1.5">
 						<Label className="text-xs" htmlFor={apiKeyInputId}>
 							API Key
@@ -315,27 +311,6 @@ export function ChatConfigPanelContent({
 					Included in agent context automatically.
 				</p>
 				<div className="space-y-3">
-					<div className="space-y-1.5">
-						<Label className="text-xs">Risk profile</Label>
-						<Select
-							onValueChange={(v) =>
-								updatePreferences({
-									riskProfile: v as "conservative" | "moderate" | "aggressive",
-								})
-							}
-							value={preferences.riskProfile}
-						>
-							<SelectTrigger className="h-8 w-full text-xs">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="conservative">Conservative</SelectItem>
-								<SelectItem value="moderate">Moderate</SelectItem>
-								<SelectItem value="aggressive">Aggressive</SelectItem>
-							</SelectContent>
-						</Select>
-					</div>
-
 					<div className="space-y-1.5">
 						<Label className="text-xs" htmlFor="chat-sectors">
 							Favorite sectors

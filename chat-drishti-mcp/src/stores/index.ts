@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { resolveModelForProvider } from "~/lib/models";
+import { MODEL_COMPARE_MAX } from "~/lib/model-compare";
+import { toCatalogModelId } from "~/lib/openrouter-models-core";
 import { portfolioToContext } from "~/lib/portfolio-context";
 import {
 	DEFAULT_SUB_AGENT_PREFERENCES,
@@ -10,6 +12,7 @@ import type {
 	ChatSession,
 	EncryptedModelConfig,
 	LongTermMemory,
+	ModelCompareTarget,
 	ModelConfig,
 	ModelProviderId,
 	Portfolio,
@@ -50,12 +53,18 @@ interface ModelStore {
 	activeProvider: ModelProviderId;
 	activeModel: string;
 	configs: EncryptedModelConfig[];
+	compareMode: boolean;
+	compareModels: ModelCompareTarget[];
 	setActiveModel: (provider: ModelProviderId, model: string) => void;
 	setActiveProvider: (provider: ModelProviderId) => void;
 	saveConfig: (config: ModelConfig) => Promise<void>;
 	removeApiKey: (provider: ModelProviderId) => void;
 	getActiveEncryptedConfig: () => EncryptedModelConfig | null;
+	getEncryptedConfigForTarget: (target: ModelCompareTarget) => EncryptedModelConfig | null;
 	hasStoredApiKey: (provider?: ModelProviderId) => boolean;
+	setCompareMode: (enabled: boolean) => void;
+	toggleCompareModel: (target: ModelCompareTarget) => void;
+	setCompareModels: (targets: ModelCompareTarget[]) => void;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -64,6 +73,11 @@ export const useModelStore = create<ModelStore>()(
 			activeProvider: "openrouter",
 			activeModel: "google/gemini-2.5-flash",
 			configs: [],
+			compareMode: false,
+			compareModels: [
+				{ provider: "openrouter", model: "google/gemini-2.5-flash" },
+				{ provider: "openrouter", model: "anthropic/claude-sonnet-4" },
+			],
 
 			setActiveModel: (provider, model) =>
 				set({ activeProvider: provider, activeModel: model }),
@@ -129,12 +143,48 @@ export const useModelStore = create<ModelStore>()(
 				return { ...entry, model: activeModel };
 			},
 
+			getEncryptedConfigForTarget: (target) => {
+				const entry = get().configs.find((c) => c.provider === target.provider);
+				if (!entry) return null;
+				return { ...entry, model: target.model };
+			},
+
 			hasStoredApiKey: (provider) => {
 				const target = provider ?? get().activeProvider;
 				if (target === "ollama") return true;
 				const entry = get().configs.find((c) => c.provider === target);
 				return Boolean(entry?.encryptedApiKey?.trim());
 			},
+
+			setCompareMode: (enabled) => set({ compareMode: enabled }),
+
+			toggleCompareModel: (target) =>
+				set((state) => {
+					const normalized = {
+						provider: target.provider,
+						model: toCatalogModelId(target.provider, target.model),
+					};
+					const key = `${normalized.provider}:${normalized.model}`;
+					const exists = state.compareModels.some(
+						(entry) =>
+							`${entry.provider}:${toCatalogModelId(entry.provider, entry.model)}` ===
+							key,
+					);
+					if (exists) {
+						return {
+							compareModels: state.compareModels.filter(
+								(entry) =>
+									`${entry.provider}:${toCatalogModelId(entry.provider, entry.model)}` !==
+									key,
+							),
+						};
+					}
+					if (state.compareModels.length >= MODEL_COMPARE_MAX) return state;
+					return { compareModels: [...state.compareModels, normalized] };
+				}),
+
+			setCompareModels: (targets) =>
+				set({ compareModels: targets.slice(0, MODEL_COMPARE_MAX) }),
 		}),
 		{
 			name: "drishti-model-config",
@@ -167,7 +217,6 @@ interface MemoryStore extends LongTermMemory {
 }
 
 const defaultPreferences: UserPreferences = {
-	riskProfile: "moderate",
 	favoriteSectors: [],
 	subAgents: DEFAULT_SUB_AGENT_PREFERENCES,
 };
@@ -229,9 +278,8 @@ export const useMemoryStore = create<MemoryStore>()(
 				})),
 
 			toContextString: () => {
-				const { preferences, watchlists, portfolios } = get();
+				const { preferences, watchlists } = get();
 				const parts: string[] = [];
-				parts.push(`Risk profile: ${preferences.riskProfile}`);
 				if (preferences.favoriteSectors.length) {
 					parts.push(
 						`Favorite sectors: ${preferences.favoriteSectors.join(", ")}`,

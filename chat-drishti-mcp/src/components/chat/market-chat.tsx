@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
 	Bank,
@@ -12,20 +12,23 @@ import {
 } from "@phosphor-icons/react";
 import { DefaultChatTransport } from "ai";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
-import { BashTool } from "~/components/agent-elements/tools/bash-tool";
-import { EditTool } from "~/components/agent-elements/tools/edit-tool";
-import { SearchTool } from "~/components/agent-elements/tools/search-tool";
-import { ThinkingTool } from "~/components/agent-elements/tools/thinking-tool";
-import { TodoTool } from "~/components/agent-elements/tools/todo-tool";
-import type { AgentChatProps } from "~/components/agent-elements/types";
+import { InputBar } from "~/components/agent-elements/input-bar";
 import { DrishtiLoader } from "~/components/brand/drishti-loader";
 import { ChatConfigPanel } from "~/components/chat/chat-config-panel";
 import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
 import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
+import {
+	ModelCompareResults,
+	type CompareRun,
+} from "~/components/chat/model-compare-results";
 import { QueryCostMenu } from "~/components/chat/query-cost-menu";
 import { Button } from "~/components/ui/button";
+import { CHAT_TOOL_RENDERERS } from "~/lib/chat-tool-renderers";
 import { getModelDisplayName } from "~/lib/openrouter-models-core";
+import {
+	MODEL_COMPARE_MIN,
+} from "~/lib/model-compare";
 import {
 	getLastQueryUsageFromMessages,
 	sumQueryUsageFromMessages,
@@ -40,15 +43,6 @@ import {
 } from "~/stores";
 
 const SIDEBAR_COLLAPSED_KEY = "drishti-sidebar-collapsed";
-const TOOL_RENDERERS = {
-	Bash: BashTool,
-	Edit: EditTool,
-	Write: EditTool,
-	Search: SearchTool,
-	WebSearch: SearchTool,
-	TodoWrite: TodoTool,
-	Thinking: ThinkingTool,
-} as unknown as NonNullable<AgentChatProps["toolRenderers"]>;
 
 const SUGGESTIONS = [
 	{
@@ -99,9 +93,16 @@ export function MarketChat() {
 		togglePinSession,
 	} = useChatStore();
 	const getActiveEncryptedConfig = useModelStore((s) => s.getActiveEncryptedConfig);
+	const getEncryptedConfigForTarget = useModelStore(
+		(s) => s.getEncryptedConfigForTarget,
+	);
 	const hasStoredApiKey = useModelStore((s) => s.hasStoredApiKey);
 	const activeProvider = useModelStore((s) => s.activeProvider);
 	const activeModel = useModelStore((s) => s.activeModel);
+	const compareMode = useModelStore((s) => s.compareMode);
+	const compareModels = useModelStore((s) => s.compareModels);
+	const setActiveModel = useModelStore((s) => s.setActiveModel);
+	const setCompareMode = useModelStore((s) => s.setCompareMode);
 	const configs = useModelStore((s) => s.configs);
 	const { models: catalogModels } = useModelsCatalog({ provider: activeProvider });
 	const memoryContext = useMemoryStore((s) => s.toContextString());
@@ -120,6 +121,10 @@ export function MarketChat() {
 	const [focusPanelSignal, setFocusPanelSignal] = useState(0);
 	const [focusSheetSignal, setFocusSheetSignal] = useState(0);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [compareRun, setCompareRun] = useState<CompareRun | null>(null);
+	const [compareStreaming, setCompareStreaming] = useState(false);
+	const [compareDraft, setCompareDraft] = useState("");
+	const compareStopAllRef = useRef<(() => void) | null>(null);
 
 	useEffect(() => {
 		try {
@@ -166,6 +171,11 @@ export function MarketChat() {
 		if (ready) setInfoBarDismissed(false);
 	}, [hasStoredApiKey, activeProvider, activeModel, configs]);
 
+	const portfolioContext = useMemo(
+		() => portfolioToContext(portfolios),
+		[portfolios],
+	);
+
 	const transport = useMemo(
 		() =>
 			new DefaultChatTransport({
@@ -186,7 +196,7 @@ export function MarketChat() {
 							modelConfig,
 							sessionId: activeSessionId,
 							memoryContext,
-							portfolioContext: portfolioToContext(portfolios),
+							portfolioContext,
 							enabledSubAgents,
 						},
 					};
@@ -197,7 +207,7 @@ export function MarketChat() {
 			hasStoredApiKey,
 			activeSessionId,
 			memoryContext,
-			portfolios,
+			portfolioContext,
 			enabledSubAgents,
 		],
 	);
@@ -220,18 +230,93 @@ export function MarketChat() {
 		}
 	}, [activeSessionId, sessions, messages.length, setMessages]);
 
+	const openModelConfig = useCallback(() => {
+		if (typeof window !== "undefined" && window.innerWidth < 1280) {
+			setConfigSheetOpen(true);
+			setFocusSheetSignal((n) => n + 1);
+			return;
+		}
+		setFocusPanelSignal((n) => n + 1);
+	}, []);
+
 	const handleSend = useCallback(
 		({ content }: { content: string }) => {
 			if (!canChat || !content.trim()) return;
+
+			if (compareMode) {
+				if (compareModels.length < MODEL_COMPARE_MIN) {
+					openModelConfig();
+					return;
+				}
+
+				const configuredCount = compareModels.filter((target) =>
+					Boolean(getEncryptedConfigForTarget(target)),
+				).length;
+
+				if (configuredCount < MODEL_COMPARE_MIN) {
+					openModelConfig();
+					return;
+				}
+
+				compareStopAllRef.current?.();
+				setCompareRun({
+					id: crypto.randomUUID(),
+					query: content.trim(),
+					priorMessages: compareRun ? [] : messages,
+				});
+				return;
+			}
+
 			void sendMessage({ text: content });
 		},
-		[canChat, sendMessage],
+		[
+			canChat,
+			compareMode,
+			compareModels,
+			compareRun,
+			getEncryptedConfigForTarget,
+			messages,
+			sendMessage,
+			openModelConfig,
+		],
 	);
 
-	const modelBadgeLabel = useMemo(
-		() => getModelDisplayName(catalogModels, activeProvider, activeModel),
-		[activeProvider, activeModel, catalogModels],
+	const handleStop = useCallback(() => {
+		if (compareRun) {
+			compareStopAllRef.current?.();
+			return;
+		}
+		stop();
+	}, [compareRun, stop]);
+
+	const handleCloseCompare = useCallback(() => {
+		compareStopAllRef.current?.();
+		setCompareRun(null);
+		setCompareStreaming(false);
+	}, []);
+
+	const handleUseComparedModel = useCallback(
+		(provider: typeof activeProvider, model: string) => {
+			setActiveModel(provider, model);
+			setCompareMode(false);
+			setCompareRun(null);
+			setCompareStreaming(false);
+		},
+		[setActiveModel, setCompareMode],
 	);
+
+	const modelBadgeLabel = useMemo(() => {
+		if (compareMode) {
+			return `Compare · ${compareModels.length} models`;
+		}
+		return getModelDisplayName(catalogModels, activeProvider, activeModel);
+	}, [
+		compareMode,
+		compareModels.length,
+		activeProvider,
+		activeModel,
+		catalogModels,
+	]);
 
 	const lastQueryUsage = useMemo(
 		() => getLastQueryUsageFromMessages(messages),
@@ -242,15 +327,24 @@ export function MarketChat() {
 		[messages],
 	);
 
-	const showSidebarSuggestions = messages.length === 0;
-	const openModelConfig = useCallback(() => {
-		if (typeof window !== "undefined" && window.innerWidth < 1280) {
-			setConfigSheetOpen(true);
-			setFocusSheetSignal((n) => n + 1);
-			return;
-		}
-		setFocusPanelSignal((n) => n + 1);
+	const chatStatus = compareStreaming ? "submitted" : status;
+
+	const compareSharedContext = useMemo(
+		() => ({
+			sessionId: activeSessionId,
+			memoryContext,
+			portfolioContext,
+			enabledSubAgents,
+		}),
+		[activeSessionId, memoryContext, portfolioContext, enabledSubAgents],
+	);
+
+	const handleCompareRegisterStop = useCallback((stopAll: () => void) => {
+		compareStopAllRef.current = stopAll;
 	}, []);
+
+	const showCompareResults = compareRun !== null;
+	const showSidebarSuggestions = messages.length === 0 && !showCompareResults;
 
 	const handleSidebarPrompt = useCallback(
 		(prompt: string) => {
@@ -314,6 +408,56 @@ export function MarketChat() {
 					</div>
 					{!configReady ? (
 						<DrishtiLoader fullscreen label="Loading configuration" />
+					) : showCompareResults && compareRun ? (
+						<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+							<ModelCompareResults
+								catalogModels={catalogModels}
+								compareModels={compareModels}
+								getEncryptedConfigForTarget={getEncryptedConfigForTarget}
+								onClose={handleCloseCompare}
+								onRegisterStop={handleCompareRegisterStop}
+								onStreamingChange={setCompareStreaming}
+								onUseModel={handleUseComparedModel}
+								run={compareRun}
+								sharedContext={compareSharedContext}
+								toolRenderers={CHAT_TOOL_RENDERERS}
+							/>
+							<div className="shrink-0 border-border border-t px-4 pb-4">
+								<InputBar
+									className="pt-3"
+									disabled={!canChat}
+									infoBar={
+										compareMode
+											? {
+													title: "Compare mode",
+													description: `Next prompt runs on ${compareModels.length} models in parallel.`,
+													position: "bottom" as const,
+												}
+											: undefined
+									}
+									modelBadge={modelBadgeLabel}
+									onChange={setCompareDraft}
+									onSend={({ content }) => {
+										handleSend({ content });
+										setCompareDraft("");
+									}}
+									onStop={handleStop}
+									placeholder="Ask the same question across models..."
+									rightActions={
+										<QueryCostMenu
+											catalogModels={catalogModels}
+											isStreaming={compareStreaming}
+											lastQueryUsage={null}
+											modelId={activeModel}
+											provider={activeProvider}
+											sessionUsage={sessionQueryUsage}
+										/>
+									}
+									status={chatStatus}
+									value={compareDraft}
+								/>
+							</div>
+						</div>
 					) : (
 						<AgentChat
 							className="flex-1"
@@ -322,7 +466,15 @@ export function MarketChat() {
 							emptySuggestionsPlacement="empty"
 							emptySuggestionsPosition="bottom"
 							error={error ?? undefined}
-							infoBar={inputInfoBar}
+							infoBar={
+								compareMode
+									? {
+											title: "Compare mode",
+											description: `Select ${MODEL_COMPARE_MIN}+ models in Configuration, then send a prompt.`,
+											position: "bottom" as const,
+										}
+									: inputInfoBar
+							}
 							inputDisabled={!canChat}
 							inputRightActions={
 								<QueryCostMenu
@@ -339,15 +491,19 @@ export function MarketChat() {
 							modelBadge={modelBadgeLabel}
 							messages={messages}
 							onSend={handleSend}
-							onStop={stop}
-							placeholder="Ask about a stock, sector move, or your portfolio..."
-							status={status}
+							onStop={handleStop}
+							placeholder={
+								compareMode
+									? "Ask the same question across models..."
+									: "Ask about a stock, sector move, or your portfolio..."
+							}
+							status={chatStatus}
 							suggestions={{
 								items: SUGGESTIONS,
 								className: "justify-center",
 								itemClassName: "h-8",
 							}}
-							toolRenderers={TOOL_RENDERERS}
+							toolRenderers={CHAT_TOOL_RENDERERS}
 						/>
 					)}
 				</div>

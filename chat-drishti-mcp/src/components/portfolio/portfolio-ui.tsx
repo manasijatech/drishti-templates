@@ -179,7 +179,6 @@ export function PortfolioCard({
 		<div
 			className={cn(
 				"overflow-hidden rounded-lg border border-border bg-card",
-				variant === "compact" ? "shadow-xs" : "",
 			)}
 		>
 			<div className="flex items-start justify-between gap-2 border-border border-b bg-muted/30 px-3 py-2.5">

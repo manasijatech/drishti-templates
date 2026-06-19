@@ -11,13 +11,6 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
@@ -92,7 +85,7 @@ export function SettingsPage() {
 				</TabsList>
 
 				<TabsContent className="space-y-4" value="model">
-					<Card className="border-border shadow-none">
+					<Card className="border-border">
 						<CardHeader>
 							<CardTitle>Model Provider</CardTitle>
 							<CardDescription>
@@ -171,7 +164,7 @@ export function SettingsPage() {
 				</TabsContent>
 
 				<TabsContent className="space-y-4" value="preferences">
-					<Card className="border-border shadow-none">
+					<Card className="border-border">
 						<CardHeader>
 							<CardTitle>Long-term Memory</CardTitle>
 							<CardDescription>
@@ -179,34 +172,6 @@ export function SettingsPage() {
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-4">
-							<div className="space-y-2">
-								<Label>Risk Profile</Label>
-								<Select
-									onValueChange={(v) =>
-										updatePreferences({
-											riskProfile: v as
-												| "conservative"
-												| "moderate"
-												| "aggressive",
-										})
-									}
-									value={preferences.riskProfile}
-								>
-									<SelectTrigger>
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="conservative">
-											Conservative
-										</SelectItem>
-										<SelectItem value="moderate">Moderate</SelectItem>
-										<SelectItem value="aggressive">
-											Aggressive
-										</SelectItem>
-									</SelectContent>
-								</Select>
-							</div>
-
 							<div className="space-y-2">
 								<Label htmlFor="sectors">Favorite Sectors</Label>
 								<Input

@@ -6,12 +6,10 @@ export function buildShortTermContext(messages: { role: string; content: string 
 }
 
 export function buildLongTermContext(memory: {
-	riskProfile?: string;
 	favoriteSectors?: string[];
 	watchlists?: { name: string; symbols: string[] }[];
 }): string {
 	const parts: string[] = [];
-	if (memory.riskProfile) parts.push(`Risk profile: ${memory.riskProfile}`);
 	if (memory.favoriteSectors?.length) {
 		parts.push(`Favorite sectors: ${memory.favoriteSectors.join(", ")}`);
 	}

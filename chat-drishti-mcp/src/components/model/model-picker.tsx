@@ -303,7 +303,7 @@ export function ModelPicker({
 					</Button>
 
 					{open ? (
-						<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-50 rounded-lg border border-border bg-popover shadow-lg">
+						<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-50 rounded-lg border border-border bg-popover">
 							<div className="space-y-2 border-border border-b p-2">
 								<div className="relative">
 									<MagnifyingGlass

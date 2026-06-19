@@ -65,6 +65,15 @@ function logRunStreamEvent(sessionId: string, event: RunStreamEvent) {
 	}
 }
 
+function extractFinalOutputText(runResult: {
+	finalOutput: unknown;
+}): string {
+	const out = runResult.finalOutput;
+	if (typeof out === "string") return out;
+	if (out == null) return "";
+	return JSON.stringify(out, null, 2);
+}
+
 function toQueryUsageMetadata(runResult: {
 	runContext: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
 }): QueryUsageMetadata | null {
@@ -118,10 +127,7 @@ function appendQueryUsageToUiStream(
 	});
 }
 
-export async function runSupervisorChat(
-	body: ChatRequestBody,
-	options?: { signal?: AbortSignal },
-) {
+async function prepareSupervisorRun(body: ChatRequestBody) {
 	const sessionId = body.sessionId ?? crypto.randomUUID();
 	const { modelConfig, memoryContext, portfolioContext, enabledSubAgents } = body;
 	const userQuery = extractTextFromMessages(body.messages);
@@ -134,56 +140,105 @@ export async function runSupervisorChat(
 
 	logAgentTrace(sessionId, "Supervisor", "session_start", userQuery);
 
+	const activeServers = mcpServers.active;
+	const enabledAgents: SubAgentId[] =
+		enabledSubAgents ??
+		getEnabledSubAgentIds(normalizeSubAgentPreferences());
+
+	const specialists: Partial<
+		Record<SubAgentId, Awaited<ReturnType<typeof createResearchAgent>>>
+	> = {};
+
+	if (enabledAgents.includes("research_agent")) {
+		specialists.research_agent = createResearchAgent(model, activeServers);
+	}
+	if (enabledAgents.includes("news_analyst")) {
+		specialists.news_analyst = createNewsAnalystAgent(model, activeServers);
+	}
+	if (enabledAgents.includes("market_analyst")) {
+		specialists.market_analyst = createMarketAnalystAgent(model, activeServers);
+	}
+	if (enabledAgents.includes("portfolio_agent")) {
+		specialists.portfolio_agent = createPortfolioAgent(model, activeServers);
+	}
+
+	const supervisor = createSupervisorAgent(model, activeServers, specialists, {
+		memoryContext,
+		portfolioContext,
+		enabledSubAgents: enabledAgents,
+	});
+
+	const sessionContext = [
+		memoryContext ? `User memory:\n${memoryContext}` : "",
+		portfolioContext
+			? `Configured portfolios for this session:\n${portfolioContext}`
+			: "",
+	]
+		.filter(Boolean)
+		.join("\n\n");
+
+	const prompt = [
+		sessionContext,
+		conversationContext ? `Conversation so far:\n${conversationContext}` : "",
+		`Latest user message:\n${userQuery}`,
+	]
+		.filter(Boolean)
+		.join("\n\n");
+
+	return { sessionId, supervisor, prompt, mcpServers, userQuery };
+}
+
+export async function runSupervisorChatSync(
+	body: ChatRequestBody,
+	options?: { signal?: AbortSignal },
+) {
+	const setup = await prepareSupervisorRun(body);
+
 	try {
-		const activeServers = mcpServers.active;
-		const enabledAgents: SubAgentId[] =
-			enabledSubAgents ??
-			getEnabledSubAgentIds(normalizeSubAgentPreferences());
+		logAgentTrace(setup.sessionId, "Supervisor", "run_start");
 
-		const specialists: Partial<Record<SubAgentId, Awaited<ReturnType<typeof createResearchAgent>>>> =
-			{};
-
-		if (enabledAgents.includes("research_agent")) {
-			specialists.research_agent = createResearchAgent(model, activeServers);
-		}
-		if (enabledAgents.includes("news_analyst")) {
-			specialists.news_analyst = createNewsAnalystAgent(model, activeServers);
-		}
-		if (enabledAgents.includes("market_analyst")) {
-			specialists.market_analyst = createMarketAnalystAgent(model, activeServers);
-		}
-		if (enabledAgents.includes("portfolio_agent")) {
-			specialists.portfolio_agent = createPortfolioAgent(model, activeServers);
-		}
-
-		const supervisor = createSupervisorAgent(model, activeServers, specialists, {
-			memoryContext,
-			portfolioContext,
-			enabledSubAgents: enabledAgents,
+		const runResult = await run(setup.supervisor, setup.prompt, {
+			stream: false,
+			signal: options?.signal,
 		});
 
-		const sessionContext = [
-			memoryContext ? `User memory:\n${memoryContext}` : "",
-			portfolioContext
-				? `Configured portfolios for this session:\n${portfolioContext}`
-				: "",
-		]
-			.filter(Boolean)
-			.join("\n\n");
+		const text = extractFinalOutputText(runResult);
+		const queryUsage = toQueryUsageMetadata(runResult);
 
-		const prompt = [
-			sessionContext,
-			conversationContext
-				? `Conversation so far:\n${conversationContext}`
-				: "",
-			`Latest user message:\n${userQuery}`,
-		]
-			.filter(Boolean)
-			.join("\n\n");
+		if (queryUsage) {
+			recordUsage(setup.sessionId, {
+				promptTokens: queryUsage.promptTokens,
+				completionTokens: queryUsage.completionTokens,
+				totalTokens: queryUsage.totalTokens,
+			});
+			logAgentTrace(
+				setup.sessionId,
+				"Supervisor",
+				"usage",
+				`${queryUsage.totalTokens} tokens`,
+			);
+		}
 
-		logAgentTrace(sessionId, "Supervisor", "run_start");
+		return {
+			text,
+			usage: queryUsage,
+			sessionId: setup.sessionId,
+		};
+	} finally {
+		await setup.mcpServers.close();
+	}
+}
 
-		const runResult = await run(supervisor, prompt, {
+export async function runSupervisorChat(
+	body: ChatRequestBody,
+	options?: { signal?: AbortSignal },
+) {
+	const setup = await prepareSupervisorRun(body);
+
+	try {
+		logAgentTrace(setup.sessionId, "Supervisor", "run_start");
+
+		const runResult = await run(setup.supervisor, setup.prompt, {
 			stream: true,
 			signal: options?.signal,
 		});
@@ -195,7 +250,7 @@ export async function runSupervisorChat(
 					async start(controller) {
 						try {
 							for await (const event of inner) {
-								logRunStreamEvent(sessionId, event);
+								logRunStreamEvent(setup.sessionId, event);
 								controller.enqueue(event);
 							}
 							controller.close();
@@ -213,7 +268,7 @@ export async function runSupervisorChat(
 		const response = createUIMessageStreamResponse({
 			stream: streamWithUsage,
 			headers: {
-				"X-Session-Id": sessionId,
+				"X-Session-Id": setup.sessionId,
 			},
 		});
 
@@ -221,13 +276,13 @@ export async function runSupervisorChat(
 			.then(() => {
 				const queryUsage = toQueryUsageMetadata(runResult);
 				if (!queryUsage) return;
-				recordUsage(sessionId, {
+				recordUsage(setup.sessionId, {
 					promptTokens: queryUsage.promptTokens,
 					completionTokens: queryUsage.completionTokens,
 					totalTokens: queryUsage.totalTokens,
 				});
 				logAgentTrace(
-					sessionId,
+					setup.sessionId,
 					"Supervisor",
 					"usage",
 					`${queryUsage.totalTokens} tokens`,
@@ -235,9 +290,9 @@ export async function runSupervisorChat(
 			})
 			.catch(() => undefined);
 
-		return { response, cleanup: () => mcpServers.close() };
+		return { response, cleanup: () => setup.mcpServers.close() };
 	} catch (error) {
-		await mcpServers.close();
+		await setup.mcpServers.close();
 		throw error;
 	}
 }

@@ -53,7 +53,6 @@ export type SubAgentId =
 export type SubAgentPreferences = Record<SubAgentId, boolean>;
 
 export interface UserPreferences {
-	riskProfile: "conservative" | "moderate" | "aggressive";
 	favoriteSectors: string[];
 	defaultModelProvider?: ModelProviderId;
 	subAgents: SubAgentPreferences;
@@ -112,6 +111,29 @@ export interface QueryUsageMetadata {
 export interface ChatRequestBody {
 	messages: UIMessage[];
 	modelConfig: ModelConfig;
+	sessionId?: string;
+	memoryContext?: string;
+	portfolioContext?: string;
+	enabledSubAgents?: SubAgentId[];
+}
+
+export interface ModelCompareTarget {
+	provider: ModelProviderId;
+	model: string;
+}
+
+export interface ModelCompareResult {
+	provider: ModelProviderId;
+	model: string;
+	text: string;
+	usage: QueryUsageMetadata | null;
+	durationMs: number;
+	error?: string;
+}
+
+export interface CompareChatRequestBody {
+	messages: UIMessage[];
+	modelConfigs: EncryptedModelConfig[];
 	sessionId?: string;
 	memoryContext?: string;
 	portfolioContext?: string;
