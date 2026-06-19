@@ -50,11 +50,14 @@ function sanitizeStoredModelConfig(
 	return { ...config, model };
 }
 
+export type OnboardingStatus = "pending" | "completed" | "skipped";
+
 interface ModelStore {
 	activeProvider: ModelProviderId;
 	activeModel: string;
 	configs: EncryptedModelConfig[];
 	drishtiApiKey: EncryptedApiKeyCredential | null;
+	onboardingStatus: OnboardingStatus;
 	compareMode: boolean;
 	compareModels: ModelCompareTarget[];
 	setActiveModel: (provider: ModelProviderId, model: string) => void;
@@ -68,6 +71,8 @@ interface ModelStore {
 	getEncryptedDrishtiApiKey: () => EncryptedApiKeyCredential | null;
 	hasStoredApiKey: (provider?: ModelProviderId) => boolean;
 	hasStoredDrishtiApiKey: () => boolean;
+	completeOnboarding: () => void;
+	skipOnboarding: () => void;
 	setCompareMode: (enabled: boolean) => void;
 	toggleCompareModel: (target: ModelCompareTarget) => void;
 	setCompareModels: (targets: ModelCompareTarget[]) => void;
@@ -80,6 +85,7 @@ export const useModelStore = create<ModelStore>()(
 			activeModel: "google/gemini-2.5-flash",
 			configs: [],
 			drishtiApiKey: null,
+			onboardingStatus: "pending",
 			compareMode: false,
 			compareModels: [
 				{ provider: "openrouter", model: "google/gemini-2.5-flash" },
@@ -184,6 +190,10 @@ export const useModelStore = create<ModelStore>()(
 			hasStoredDrishtiApiKey: () =>
 				Boolean(get().drishtiApiKey?.encryptedApiKey?.trim()),
 
+			completeOnboarding: () => set({ onboardingStatus: "completed" }),
+
+			skipOnboarding: () => set({ onboardingStatus: "skipped" }),
+
 			setCompareMode: (enabled) => set({ compareMode: enabled }),
 
 			toggleCompareModel: (target) =>
@@ -227,6 +237,20 @@ export const useModelStore = create<ModelStore>()(
 					state.activeModel,
 					saved,
 				);
+
+				const hasModelKey =
+					state.activeProvider === "ollama" ||
+					state.configs.some(
+						(c) =>
+							c.provider === state.activeProvider &&
+							Boolean(c.encryptedApiKey?.trim()),
+					);
+				const hasDrishtiKey = Boolean(state.drishtiApiKey?.encryptedApiKey?.trim());
+
+				if (!state.onboardingStatus) {
+					state.onboardingStatus =
+						hasModelKey && hasDrishtiKey ? "completed" : "pending";
+				}
 			},
 		},
 	),

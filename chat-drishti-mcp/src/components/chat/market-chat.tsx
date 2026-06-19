@@ -23,6 +23,7 @@ import {
 	type CompareRun,
 } from "~/components/chat/model-compare-results";
 import { QueryCostMenu } from "~/components/chat/query-cost-menu";
+import { OnboardingDialog } from "~/components/onboarding/onboarding-dialog";
 import { Button } from "~/components/ui/button";
 import { CHAT_TOOL_RENDERERS } from "~/lib/chat-tool-renderers";
 import { getModelDisplayName } from "~/lib/openrouter-models-core";
@@ -107,6 +108,7 @@ export function MarketChat() {
 	const setCompareMode = useModelStore((s) => s.setCompareMode);
 	const configs = useModelStore((s) => s.configs);
 	const encryptedDrishtiKey = useModelStore((s) => s.drishtiApiKey);
+	const onboardingStatus = useModelStore((s) => s.onboardingStatus);
 	const { models: catalogModels } = useModelsCatalog({ provider: activeProvider });
 	const memoryContext = useMemoryStore((s) => s.toContextString());
 	const preferences = useMemoryStore((s) => s.preferences);
@@ -415,6 +417,7 @@ export function MarketChat() {
 
 	return (
 		<div className="flex h-screen flex-col">
+			<OnboardingDialog open={storeHydrated && onboardingStatus === "pending"} />
 			<div className="flex flex-1 overflow-hidden">
 				<ChatSidebar
 					activeSessionId={activeSessionId}
