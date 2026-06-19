@@ -1,4 +1,4 @@
-import { DrishtiLogoMark, DrishtiWordMark } from "~/components/brand/drishti-logo";
+import { DrishtiLogoMark, DrishtiChatWordMark } from "~/components/brand/drishti-logo";
 import { cn } from "~/lib/utils";
 
 type DrishtiLoaderProps = {
@@ -34,7 +34,7 @@ export function DrishtiLoader({
 			</div>
 
 			<div className="relative overflow-hidden px-1 py-0.5">
-				<DrishtiWordMark className="drishti-loader-wordmark" height={20} />
+				<DrishtiChatWordMark className="drishti-loader-wordmark" height={20} />
 				<span
 					aria-hidden
 					className="drishti-loader-sweep pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-white/70 to-transparent"

@@ -6,9 +6,9 @@ import { IBM_Plex_Mono, Rethink_Sans } from "next/font/google";
 import { AppShell } from "~/components/layout/app-shell";
 
 export const metadata: Metadata = {
-	title: "Drishti — Indian Market Intelligence",
+	title: "Drishti Chat",
 	description:
-		"Calm, explainable Indian equities intelligence powered by Drishti MCP and multi-agent analysis.",
+		"Chat with Indian market intelligence — portfolios, sectors, news, and analysis powered by Drishti MCP.",
 	icons: [
 		{
 			rel: "icon",

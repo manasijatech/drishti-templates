@@ -2,7 +2,7 @@
 
 import { CheckCircle, Eye, EyeSlash, Key, Sparkle } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { DrishtiLogoMark } from "~/components/brand/drishti-logo";
+import { DrishtiLogoMark, DRISHTI_CHAT_PRODUCT_NAME } from "~/components/brand/drishti-logo";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
 import { Button } from "~/components/ui/button";
 import {
@@ -187,7 +187,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 							<DrishtiLogoMark className="mb-4" size={40} />
 							<DialogHeader className="items-center gap-2 text-center">
 								<DialogTitle className="font-heading text-lg">
-									Welcome to Drishti
+									Welcome to {DRISHTI_CHAT_PRODUCT_NAME}
 								</DialogTitle>
 								<DialogDescription className="max-w-sm text-center text-balance">
 									Connect your AI model and Drishti MCP keys to start asking

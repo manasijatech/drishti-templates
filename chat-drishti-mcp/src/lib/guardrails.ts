@@ -20,7 +20,7 @@ const REFUSAL_BY_VIOLATION: Record<GuardrailViolation, string> = {
 		"I can't process that input. Please rephrase your question normally.",
 	harmful: "I can't help with that request.",
 	off_topic:
-		"I'm Drishti — a financial research assistant for Indian markets. I help with stocks, portfolios, sectors, news, earnings, and market analysis. I can't help with games, coding, recipes, or other general topics. What would you like to know about the markets?",
+		"I'm Drishti Chat — a financial research assistant for Indian markets. I help with stocks, portfolios, sectors, news, earnings, and market analysis. I can't help with games, coding, recipes, or other general topics. What would you like to know about the markets?",
 };
 
 export const DOMAIN_SCOPE_INSTRUCTIONS = `

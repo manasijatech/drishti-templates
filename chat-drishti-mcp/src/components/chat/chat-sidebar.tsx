@@ -8,7 +8,7 @@ import {
 	PushPin,
 } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
-import { DrishtiLogoMark, DrishtiWordMark } from "~/components/brand/drishti-logo";
+import { DrishtiLogoMark, DrishtiChatWordMark } from "~/components/brand/drishti-logo";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -257,7 +257,7 @@ export function ChatSidebar({
 			>
 				<div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
 					<DrishtiLogoMark size={collapsed ? 22 : 24} />
-					{!collapsed && <DrishtiWordMark height={17} />}
+					{!collapsed && <DrishtiChatWordMark height={17} />}
 				</div>
 				{!collapsed ? (
 					<Button

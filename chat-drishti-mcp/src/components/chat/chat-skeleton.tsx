@@ -1,5 +1,5 @@
 import { DrishtiLoader } from "~/components/brand/drishti-loader";
-import { DrishtiLogoMark, DrishtiWordMark } from "~/components/brand/drishti-logo";
+import { DrishtiLogoMark, DrishtiChatWordMark } from "~/components/brand/drishti-logo";
 import { Skeleton } from "~/components/ui/skeleton";
 
 const SIDEBAR_GROUPS = ["pinned", "today", "earlier"].map((label, groupIdx) => ({
@@ -16,7 +16,7 @@ function SidebarSkeleton() {
 			<div className="flex items-center justify-between border-sidebar-border border-b px-3 py-3">
 				<div className="flex items-center gap-2 opacity-80">
 					<DrishtiLogoMark size={24} />
-					<DrishtiWordMark height={17} />
+					<DrishtiChatWordMark height={17} />
 				</div>
 				<Skeleton className="size-7 rounded-md" />
 			</div>
