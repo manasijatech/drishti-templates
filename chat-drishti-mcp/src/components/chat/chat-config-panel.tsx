@@ -76,12 +76,18 @@ function ConfigDropdown({
 
 type ConfigSectionId = "model" | "preferences" | "portfolio";
 
+export type ConfigFocusTarget = "model" | "drishti";
+
 export function ChatConfigPanelContent({
-	focusModelSignal = 0,
+	focusSignal = 0,
+	focusTarget = "model",
 	apiKeyInputId = "chat-llm-provider-token",
+	drishtiApiKeyInputId = "chat-drishti-mcp-token",
 }: {
-	focusModelSignal?: number;
+	focusSignal?: number;
+	focusTarget?: ConfigFocusTarget;
 	apiKeyInputId?: string;
+	drishtiApiKeyInputId?: string;
 }) {
 	const {
 		activeProvider,
@@ -133,13 +139,17 @@ export function ChatConfigPanelContent({
 	};
 
 	useEffect(() => {
-		if (focusModelSignal === 0) return;
+		if (focusSignal === 0) return;
 		setOpenSection("model");
+		const inputId =
+			focusTarget === "drishti" ? drishtiApiKeyInputId : apiKeyInputId;
 		const timer = window.setTimeout(() => {
-			document.getElementById(apiKeyInputId)?.focus();
+			const input = document.getElementById(inputId);
+			input?.scrollIntoView({ block: "center", behavior: "smooth" });
+			input?.focus();
 		}, 50);
 		return () => window.clearTimeout(timer);
-	}, [focusModelSignal, apiKeyInputId]);
+	}, [focusSignal, focusTarget, apiKeyInputId, drishtiApiKeyInputId]);
 
 	const existingConfig = configs.find((c) => c.provider === activeProvider);
 	const subAgentPrefs = normalizeSubAgentPreferences(preferences.subAgents);
@@ -316,7 +326,7 @@ export function ChatConfigPanelContent({
 
 					<div className="space-y-1.5 border-border border-t pt-3">
 						<div className="space-y-1">
-							<Label className="text-xs" htmlFor="chat-drishti-mcp-token">
+							<Label className="text-xs" htmlFor={drishtiApiKeyInputId}>
 								Drishti MCP API Key
 								{storedDrishtiApiKey?.encryptedApiKey ? (
 									<span className="ml-1.5 text-emerald-600 text-xs">(saved)</span>
@@ -331,7 +341,7 @@ export function ChatConfigPanelContent({
 							<Input
 								autoComplete="off"
 								className="h-8 pr-16 text-xs"
-								id="chat-drishti-mcp-token"
+								id={drishtiApiKeyInputId}
 								name="drishti-mcp-token"
 								onChange={(e) => setDrishtiApiKey(e.target.value)}
 								placeholder={
@@ -550,9 +560,11 @@ export function ChatConfigPanelContent({
 }
 
 export function ChatConfigPanel({
-	focusModelSignal = 0,
+	focusSignal = 0,
+	focusTarget = "model",
 }: {
-	focusModelSignal?: number;
+	focusSignal?: number;
+	focusTarget?: ConfigFocusTarget;
 }) {
 	return (
 		<aside className="hidden h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-border border-l bg-card xl:flex">
@@ -562,7 +574,9 @@ export function ChatConfigPanel({
 			<ScrollArea className="min-h-0 flex-1">
 				<ChatConfigPanelContent
 					apiKeyInputId="chat-llm-provider-token-panel"
-					focusModelSignal={focusModelSignal}
+					drishtiApiKeyInputId="chat-drishti-mcp-token-panel"
+					focusSignal={focusSignal}
+					focusTarget={focusTarget}
 				/>
 			</ScrollArea>
 		</aside>

@@ -269,11 +269,18 @@ export function ModelPicker({
 	return (
 		<TooltipProvider>
 			<div className="space-y-2" ref={rootRef}>
-				<div className="relative">
+				<div
+					className={cn(
+						"relative",
+						open && "z-50 rounded-lg border border-border bg-popover",
+					)}
+				>
 					<Button
+						aria-expanded={open}
 						className={cn(
 							"h-auto min-h-8 w-full justify-between gap-2 px-2.5 py-1.5 text-left font-normal",
 							compact && "py-1.5",
+							open && "rounded-b-none border-0 bg-transparent shadow-none hover:bg-transparent",
 						)}
 						onClick={() => setOpen((value) => !value)}
 						type="button"
@@ -303,7 +310,7 @@ export function ModelPicker({
 					</Button>
 
 					{open ? (
-						<div className="absolute top-[calc(100%+4px)] right-0 left-0 z-50 rounded-lg border border-border bg-popover">
+						<div className="border-border border-t">
 							<div className="space-y-2 border-border border-b p-2">
 								<div className="relative">
 									<MagnifyingGlass

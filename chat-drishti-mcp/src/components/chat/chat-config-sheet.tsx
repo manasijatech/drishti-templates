@@ -1,7 +1,7 @@
 "use client";
 
 import { GearSix } from "@phosphor-icons/react";
-import { ChatConfigPanelContent } from "~/components/chat/chat-config-panel";
+import { ChatConfigPanelContent, type ConfigFocusTarget } from "~/components/chat/chat-config-panel";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import {
@@ -15,12 +15,14 @@ import {
 export function ChatConfigSheet({
 	open,
 	onOpenChange,
-	focusModelSignal = 0,
+	focusSignal = 0,
+	focusTarget = "model",
 	showTrigger = true,
 }: {
 	open?: boolean;
 	onOpenChange?: (open: boolean) => void;
-	focusModelSignal?: number;
+	focusSignal?: number;
+	focusTarget?: ConfigFocusTarget;
 	showTrigger?: boolean;
 }) {
 	return (
@@ -45,7 +47,9 @@ export function ChatConfigSheet({
 				<ScrollArea className="min-h-0 flex-1">
 					<ChatConfigPanelContent
 						apiKeyInputId="chat-llm-provider-token-sheet"
-						focusModelSignal={focusModelSignal}
+						drishtiApiKeyInputId="chat-drishti-mcp-token-sheet"
+						focusSignal={focusSignal}
+						focusTarget={focusTarget}
 					/>
 				</ScrollArea>
 			</SheetContent>

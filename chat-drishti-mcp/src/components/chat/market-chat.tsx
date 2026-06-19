@@ -14,7 +14,7 @@ import { DefaultChatTransport } from "ai";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
 import { InputBar } from "~/components/agent-elements/input-bar";
 import { DrishtiLoader } from "~/components/brand/drishti-loader";
-import { ChatConfigPanel } from "~/components/chat/chat-config-panel";
+import { ChatConfigPanel, type ConfigFocusTarget } from "~/components/chat/chat-config-panel";
 import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
 import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
@@ -123,8 +123,14 @@ export function MarketChat() {
 	const [canChat, setCanChat] = useState(false);
 	const [infoBarDismissed, setInfoBarDismissed] = useState(false);
 	const [configSheetOpen, setConfigSheetOpen] = useState(false);
-	const [focusPanelSignal, setFocusPanelSignal] = useState(0);
-	const [focusSheetSignal, setFocusSheetSignal] = useState(0);
+	const [panelFocus, setPanelFocus] = useState<{
+		signal: number;
+		target: ConfigFocusTarget;
+	}>({ signal: 0, target: "model" });
+	const [sheetFocus, setSheetFocus] = useState<{
+		signal: number;
+		target: ConfigFocusTarget;
+	}>({ signal: 0, target: "model" });
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [compareRun, setCompareRun] = useState<CompareRun | null>(null);
 	const [compareStreaming, setCompareStreaming] = useState(false);
@@ -249,14 +255,32 @@ export function MarketChat() {
 		}
 	}, [activeSessionId, sessions, messages.length, setMessages]);
 
-	const openModelConfig = useCallback(() => {
-		if (typeof window !== "undefined" && window.innerWidth < 1280) {
-			setConfigSheetOpen(true);
-			setFocusSheetSignal((n) => n + 1);
-			return;
-		}
-		setFocusPanelSignal((n) => n + 1);
-	}, []);
+	const openModelConfig = useCallback(
+		(target?: ConfigFocusTarget) => {
+			const hasModelKey =
+				hasStoredApiKey(activeProvider) || activeProvider === "ollama";
+			const resolvedTarget: ConfigFocusTarget =
+				target === "model" || target === "drishti"
+					? target
+					: hasModelKey && !hasStoredDrishtiApiKey()
+						? "drishti"
+						: "model";
+
+			if (typeof window !== "undefined" && window.innerWidth < 1280) {
+				setConfigSheetOpen(true);
+				setSheetFocus((current) => ({
+					signal: current.signal + 1,
+					target: resolvedTarget,
+				}));
+				return;
+			}
+			setPanelFocus((current) => ({
+				signal: current.signal + 1,
+				target: resolvedTarget,
+			}));
+		},
+		[activeProvider, hasStoredApiKey, hasStoredDrishtiApiKey],
+	);
 
 	const handleSend = useCallback(
 		({ content }: { content: string }) => {
@@ -406,7 +430,7 @@ export function MarketChat() {
 					onClose: () => setInfoBarDismissed(true),
 					action: {
 						label: "Add key",
-						onClick: openModelConfig,
+						onClick: () => openModelConfig(),
 					},
 				}
 			: undefined;
@@ -442,7 +466,8 @@ export function MarketChat() {
 							New chat
 						</Button>
 						<ChatConfigSheet
-							focusModelSignal={focusSheetSignal}
+							focusSignal={sheetFocus.signal}
+							focusTarget={sheetFocus.target}
 							onOpenChange={setConfigSheetOpen}
 							open={configSheetOpen}
 						/>
@@ -548,7 +573,10 @@ export function MarketChat() {
 						/>
 					)}
 				</div>
-				<ChatConfigPanel focusModelSignal={focusPanelSignal} />
+				<ChatConfigPanel
+					focusSignal={panelFocus.signal}
+					focusTarget={panelFocus.target}
+				/>
 			</div>
 
 		</div>
