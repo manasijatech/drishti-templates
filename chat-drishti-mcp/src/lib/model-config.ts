@@ -1,5 +1,19 @@
-import type { EncryptedModelConfig, ModelConfig, ModelProviderId } from "~/types";
+import type {
+	EncryptedApiKeyCredential,
+	EncryptedModelConfig,
+	ModelConfig,
+	ModelProviderId,
+} from "~/types";
 import { decryptApiKeyServer } from "~/lib/server-encryption";
+
+export function resolveDrishtiApiKeyFromEncrypted(
+	credential: EncryptedApiKeyCredential,
+): string {
+	if (!credential.encryptedApiKey?.trim()) {
+		throw new Error("Drishti MCP API key is required.");
+	}
+	return decryptApiKeyServer(credential.encryptedApiKey, credential.iv);
+}
 
 export function resolveModelConfigFromEncrypted(
 	config: EncryptedModelConfig,

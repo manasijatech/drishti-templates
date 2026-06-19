@@ -12,6 +12,7 @@ import { Button } from "~/components/ui/button";
 import { formatUsd } from "~/lib/query-cost";
 import type { CatalogModel } from "~/lib/openrouter-models-core";
 import type {
+	EncryptedApiKeyCredential,
 	EncryptedModelConfig,
 	ModelCompareTarget,
 	ModelProviderId,
@@ -32,6 +33,7 @@ type ModelCompareResultsProps = {
 		memoryContext?: string;
 		portfolioContext?: string;
 		enabledSubAgents?: SubAgentId[];
+		drishtiApiKey: EncryptedApiKeyCredential;
 	};
 	toolRenderers: NonNullable<AgentChatProps["toolRenderers"]>;
 	onClose: () => void;

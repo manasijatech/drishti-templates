@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { UIMessage } from "ai";
 import { InputGuardrailTripwireTriggered } from "@openai/agents";
 import { z } from "zod";
+import type { ModelConfig } from "~/types";
 import {
 	createGuardrailRefusalResponse,
 	getRefusalMessage,
@@ -10,6 +11,7 @@ import {
 } from "~/lib/guardrails";
 import {
 	hasEncryptedApiKey,
+	resolveDrishtiApiKeyFromEncrypted,
 	resolveModelConfigFromEncrypted,
 } from "~/lib/model-config";
 import { runSupervisorChat } from "~/lib/orchestrator";
@@ -31,6 +33,11 @@ const subAgentIdSchema = z.enum([
 	"portfolio_agent",
 ]);
 
+const encryptedApiKeySchema = z.object({
+	encryptedApiKey: z.string(),
+	iv: z.string(),
+});
+
 const chatRequestSchema = z.object({
 	messages: z.array(uiMessageSchema).min(1),
 	modelConfig: z.object({
@@ -47,6 +54,7 @@ const chatRequestSchema = z.object({
 		iv: z.string(),
 		baseUrl: z.string().optional(),
 	}),
+	drishtiApiKey: encryptedApiKeySchema,
 	sessionId: z.string().optional(),
 	memoryContext: z.string().optional(),
 	portfolioContext: z.string().optional(),
@@ -81,7 +89,7 @@ export async function POST(req: Request) {
 			);
 		}
 
-		let modelConfig;
+		let modelConfig: ModelConfig;
 		try {
 			modelConfig = resolveModelConfigFromEncrypted(parsed.data.modelConfig);
 		} catch (error) {
@@ -90,6 +98,22 @@ export async function POST(req: Request) {
 				{
 					error:
 						"Could not decrypt API key. Re-save your key in Configuration.",
+				},
+				{ status: 401 },
+			);
+		}
+
+		let drishtiApiKey: string;
+		try {
+			drishtiApiKey = resolveDrishtiApiKeyFromEncrypted(parsed.data.drishtiApiKey);
+		} catch (error) {
+			console.error("[chat] Drishti API key decrypt failed:", error);
+			return NextResponse.json(
+				{
+					error:
+						error instanceof Error
+							? error.message
+							: "Could not decrypt Drishti MCP API key. Re-save it in Configuration.",
 				},
 				{ status: 401 },
 			);
@@ -113,6 +137,7 @@ export async function POST(req: Request) {
 				memoryContext: parsed.data.memoryContext,
 				portfolioContext: parsed.data.portfolioContext,
 				enabledSubAgents: parsed.data.enabledSubAgents,
+				drishtiApiKey,
 			},
 			{ signal: req.signal },
 		);

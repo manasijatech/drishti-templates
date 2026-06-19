@@ -19,6 +19,7 @@ import {
 import { getLastQueryUsageFromMessages } from "~/lib/query-usage-message";
 import { cn } from "~/lib/utils";
 import type {
+	EncryptedApiKeyCredential,
 	EncryptedModelConfig,
 	ModelCompareTarget,
 	ModelProviderId,
@@ -47,6 +48,7 @@ type CompareSharedContext = {
 	memoryContext?: string;
 	portfolioContext?: string;
 	enabledSubAgents?: SubAgentId[];
+	drishtiApiKey: EncryptedApiKeyCredential;
 };
 
 type CompareModelColumnProps = {
@@ -94,11 +96,15 @@ export function CompareModelColumn({
 					if (!encryptedConfig) {
 						throw new Error("Add your API key in Configuration.");
 					}
+					if (!sharedContext.drishtiApiKey) {
+						throw new Error("Add your Drishti MCP API key in Configuration.");
+					}
 					return {
 						body: {
 							...body,
 							messages,
 							modelConfig: encryptedConfig,
+							drishtiApiKey: sharedContext.drishtiApiKey,
 							sessionId: `compare-${key}-${run?.id ?? "idle"}`,
 							memoryContext: sharedContext.memoryContext,
 							portfolioContext: sharedContext.portfolioContext,

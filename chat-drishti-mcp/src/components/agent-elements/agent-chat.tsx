@@ -61,8 +61,14 @@ export function AgentChat({
     ) {
       return;
     }
-    onSend({ role: "user", content: text });
-    setDraft("");
+    setDraft(text);
+    requestAnimationFrame(() => {
+      const textarea = rootRef.current?.querySelector("textarea");
+      if (!textarea) return;
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+    });
   };
 
   const emptySuggestionsNode = showEmptySuggestions ? (

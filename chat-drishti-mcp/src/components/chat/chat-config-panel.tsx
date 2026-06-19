@@ -90,6 +90,9 @@ export function ChatConfigPanelContent({
 		setActiveProvider,
 		saveConfig,
 		removeApiKey,
+		saveDrishtiApiKey,
+		removeDrishtiApiKey,
+		drishtiApiKey: storedDrishtiApiKey,
 		configs,
 	} = useModelStore();
 	const {
@@ -105,7 +108,9 @@ export function ChatConfigPanelContent({
 	} = useMemoryStore();
 
 	const [apiKey, setApiKey] = useState("");
+	const [drishtiApiKey, setDrishtiApiKey] = useState("");
 	const [showApiKey, setShowApiKey] = useState(false);
+	const [showDrishtiApiKey, setShowDrishtiApiKey] = useState(false);
 	const [baseUrl, setBaseUrl] = useState("");
 	const [saved, setSaved] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -167,6 +172,14 @@ export function ChatConfigPanelContent({
 				apiKey: trimmedKey,
 				baseUrl: baseUrl || undefined,
 			});
+
+			const trimmedDrishtiKey = drishtiApiKey.trim();
+			if (trimmedDrishtiKey) {
+				await saveDrishtiApiKey(trimmedDrishtiKey);
+				setDrishtiApiKey("");
+				setShowDrishtiApiKey(false);
+			}
+
 			setSaved(true);
 			setApiKey("");
 			setTimeout(() => setSaved(false), 2000);
@@ -183,6 +196,14 @@ export function ChatConfigPanelContent({
 		setSaved(false);
 	};
 
+	const handleRemoveDrishtiKey = () => {
+		removeDrishtiApiKey();
+		setDrishtiApiKey("");
+		setShowDrishtiApiKey(false);
+		setError(null);
+		setSaved(false);
+	};
+
 	return (
 		<div className="py-1">
 			<ConfigDropdown
@@ -192,7 +213,7 @@ export function ChatConfigPanelContent({
 				title="Model"
 			>
 				<p className="type-body-prose text-xs">
-					Provider, model, and API key. Keys are encrypted server-side and
+					Provider, model, and API keys. Keys are encrypted server-side and
 					stored locally as ciphertext.
 				</p>
 				<div className="space-y-3">
@@ -292,6 +313,72 @@ export function ChatConfigPanelContent({
 							/>
 						</div>
 					)}
+
+					<div className="space-y-1.5 border-border border-t pt-3">
+						<div className="space-y-1">
+							<Label className="text-xs" htmlFor="chat-drishti-mcp-token">
+								Drishti MCP API Key
+								{storedDrishtiApiKey?.encryptedApiKey ? (
+									<span className="ml-1.5 text-emerald-600 text-xs">(saved)</span>
+								) : null}
+							</Label>
+							<p className="type-body-prose text-[11px] text-muted-foreground">
+								Required for market data tools (news, movers, portfolio,
+								filings).
+							</p>
+						</div>
+						<div className="relative">
+							<Input
+								autoComplete="off"
+								className="h-8 pr-16 text-xs"
+								id="chat-drishti-mcp-token"
+								name="drishti-mcp-token"
+								onChange={(e) => setDrishtiApiKey(e.target.value)}
+								placeholder={
+									storedDrishtiApiKey?.encryptedApiKey
+										? "••••••••  (saved)"
+										: "Enter Drishti MCP API key"
+								}
+								type={showDrishtiApiKey ? "text" : "password"}
+								value={drishtiApiKey}
+							/>
+							<div className="absolute inset-y-0 right-1 flex items-center gap-0.5">
+								<Button
+									aria-label={
+										showDrishtiApiKey
+											? "Hide Drishti MCP API key"
+											: "Show Drishti MCP API key"
+									}
+									className="size-6 text-muted-foreground hover:text-foreground"
+									disabled={!drishtiApiKey}
+									onClick={() => setShowDrishtiApiKey((v) => !v)}
+									size="icon"
+									title={showDrishtiApiKey ? "Hide" : "Show"}
+									type="button"
+									variant="ghost"
+								>
+									{showDrishtiApiKey ? (
+										<EyeSlash className="size-3.5" weight="regular" />
+									) : (
+										<Eye className="size-3.5" weight="regular" />
+									)}
+								</Button>
+								{storedDrishtiApiKey?.encryptedApiKey || drishtiApiKey ? (
+									<Button
+										aria-label="Delete Drishti MCP API key"
+										className="size-6 text-muted-foreground hover:text-destructive"
+										onClick={handleRemoveDrishtiKey}
+										size="icon"
+										title="Delete saved key"
+										type="button"
+										variant="ghost"
+									>
+										<Trash className="size-3.5" weight="regular" />
+									</Button>
+								) : null}
+							</div>
+						</div>
+					</div>
 
 					{error ? <p className="text-destructive text-xs">{error}</p> : null}
 

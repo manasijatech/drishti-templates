@@ -10,6 +10,7 @@ import {
 } from "~/lib/sub-agents";
 import type {
 	ChatSession,
+	EncryptedApiKeyCredential,
 	EncryptedModelConfig,
 	LongTermMemory,
 	ModelCompareTarget,
@@ -53,15 +54,20 @@ interface ModelStore {
 	activeProvider: ModelProviderId;
 	activeModel: string;
 	configs: EncryptedModelConfig[];
+	drishtiApiKey: EncryptedApiKeyCredential | null;
 	compareMode: boolean;
 	compareModels: ModelCompareTarget[];
 	setActiveModel: (provider: ModelProviderId, model: string) => void;
 	setActiveProvider: (provider: ModelProviderId) => void;
 	saveConfig: (config: ModelConfig) => Promise<void>;
+	saveDrishtiApiKey: (apiKey: string) => Promise<void>;
 	removeApiKey: (provider: ModelProviderId) => void;
+	removeDrishtiApiKey: () => void;
 	getActiveEncryptedConfig: () => EncryptedModelConfig | null;
 	getEncryptedConfigForTarget: (target: ModelCompareTarget) => EncryptedModelConfig | null;
+	getEncryptedDrishtiApiKey: () => EncryptedApiKeyCredential | null;
 	hasStoredApiKey: (provider?: ModelProviderId) => boolean;
+	hasStoredDrishtiApiKey: () => boolean;
 	setCompareMode: (enabled: boolean) => void;
 	toggleCompareModel: (target: ModelCompareTarget) => void;
 	setCompareModels: (targets: ModelCompareTarget[]) => void;
@@ -73,6 +79,7 @@ export const useModelStore = create<ModelStore>()(
 			activeProvider: "openrouter",
 			activeModel: "google/gemini-2.5-flash",
 			configs: [],
+			drishtiApiKey: null,
 			compareMode: false,
 			compareModels: [
 				{ provider: "openrouter", model: "google/gemini-2.5-flash" },
@@ -136,6 +143,22 @@ export const useModelStore = create<ModelStore>()(
 					),
 				})),
 
+			saveDrishtiApiKey: async (apiKey) => {
+				const trimmed = apiKey.trim();
+				if (!trimmed) {
+					throw new Error("Enter a Drishti MCP API key before saving.");
+				}
+				const encrypted = await encryptApiKeyViaServer(trimmed);
+				set({
+					drishtiApiKey: {
+						encryptedApiKey: encrypted.encryptedApiKey,
+						iv: encrypted.iv,
+					},
+				});
+			},
+
+			removeDrishtiApiKey: () => set({ drishtiApiKey: null }),
+
 			getActiveEncryptedConfig: () => {
 				const { activeProvider, activeModel } = get();
 				const entry = get().configs.find((c) => c.provider === activeProvider);
@@ -149,12 +172,17 @@ export const useModelStore = create<ModelStore>()(
 				return { ...entry, model: target.model };
 			},
 
+			getEncryptedDrishtiApiKey: () => get().drishtiApiKey,
+
 			hasStoredApiKey: (provider) => {
 				const target = provider ?? get().activeProvider;
 				if (target === "ollama") return true;
 				const entry = get().configs.find((c) => c.provider === target);
 				return Boolean(entry?.encryptedApiKey?.trim());
 			},
+
+			hasStoredDrishtiApiKey: () =>
+				Boolean(get().drishtiApiKey?.encryptedApiKey?.trim()),
 
 			setCompareMode: (enabled) => set({ compareMode: enabled }),
 

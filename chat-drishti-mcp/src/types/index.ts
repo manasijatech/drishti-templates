@@ -23,6 +23,11 @@ export interface EncryptedModelConfig {
 	baseUrl?: string;
 }
 
+export interface EncryptedApiKeyCredential {
+	encryptedApiKey: string;
+	iv: string;
+}
+
 export interface PortfolioHolding {
 	symbol: string;
 	quantity: number;
@@ -115,6 +120,7 @@ export interface ChatRequestBody {
 	memoryContext?: string;
 	portfolioContext?: string;
 	enabledSubAgents?: SubAgentId[];
+	drishtiApiKey: string;
 }
 
 export interface ModelCompareTarget {

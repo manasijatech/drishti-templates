@@ -134,8 +134,12 @@ async function prepareSupervisorRun(body: ChatRequestBody) {
 	const conversationContext = buildConversationContext(body.messages);
 
 	const model = createAgentModel(modelConfig);
+	const drishtiApiKey = body.drishtiApiKey?.trim();
+	if (!drishtiApiKey) {
+		throw new Error("Drishti MCP API key is required.");
+	}
 	const mcpServers = await connectMarketDataServers({
-		drishtiApiKey: process.env.DRISHTI_API_KEY,
+		drishtiApiKey,
 	});
 
 	logAgentTrace(sessionId, "Supervisor", "session_start", userQuery);

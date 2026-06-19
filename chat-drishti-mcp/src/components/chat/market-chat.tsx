@@ -96,7 +96,9 @@ export function MarketChat() {
 	const getEncryptedConfigForTarget = useModelStore(
 		(s) => s.getEncryptedConfigForTarget,
 	);
+	const getEncryptedDrishtiApiKey = useModelStore((s) => s.getEncryptedDrishtiApiKey);
 	const hasStoredApiKey = useModelStore((s) => s.hasStoredApiKey);
+	const hasStoredDrishtiApiKey = useModelStore((s) => s.hasStoredDrishtiApiKey);
 	const activeProvider = useModelStore((s) => s.activeProvider);
 	const activeModel = useModelStore((s) => s.activeModel);
 	const compareMode = useModelStore((s) => s.compareMode);
@@ -104,6 +106,7 @@ export function MarketChat() {
 	const setActiveModel = useModelStore((s) => s.setActiveModel);
 	const setCompareMode = useModelStore((s) => s.setCompareMode);
 	const configs = useModelStore((s) => s.configs);
+	const encryptedDrishtiKey = useModelStore((s) => s.drishtiApiKey);
 	const { models: catalogModels } = useModelsCatalog({ provider: activeProvider });
 	const memoryContext = useMemoryStore((s) => s.toContextString());
 	const preferences = useMemoryStore((s) => s.preferences);
@@ -164,12 +167,20 @@ export function MarketChat() {
 	}, [storeHydrated, activeSessionId, createSession]);
 
 	useEffect(() => {
-		const ready =
+		const hasModelKey =
 			hasStoredApiKey(activeProvider) || activeProvider === "ollama";
+		const ready = hasModelKey && hasStoredDrishtiApiKey();
 		setCanChat(ready);
 		setConfigReady(true);
 		if (ready) setInfoBarDismissed(false);
-	}, [hasStoredApiKey, activeProvider, activeModel, configs]);
+	}, [
+		hasStoredApiKey,
+		hasStoredDrishtiApiKey,
+		activeProvider,
+		activeModel,
+		configs,
+		encryptedDrishtiKey,
+	]);
 
 	const portfolioContext = useMemo(
 		() => portfolioToContext(portfolios),
@@ -182,6 +193,7 @@ export function MarketChat() {
 				api: "/api/chat",
 				prepareSendMessagesRequest: async ({ messages, body }) => {
 					const modelConfig = getActiveEncryptedConfig();
+					const drishtiApiKey = getEncryptedDrishtiApiKey();
 					if (
 						!modelConfig ||
 						(!hasStoredApiKey(modelConfig.provider) &&
@@ -189,11 +201,15 @@ export function MarketChat() {
 					) {
 						throw new Error("Add your API key in Configuration.");
 					}
+					if (!drishtiApiKey) {
+						throw new Error("Add your Drishti MCP API key in Configuration.");
+					}
 					return {
 						body: {
 							...body,
 							messages,
 							modelConfig,
+							drishtiApiKey,
 							sessionId: activeSessionId,
 							memoryContext,
 							portfolioContext,
@@ -204,6 +220,7 @@ export function MarketChat() {
 			}),
 		[
 			getActiveEncryptedConfig,
+			getEncryptedDrishtiApiKey,
 			hasStoredApiKey,
 			activeSessionId,
 			memoryContext,
@@ -329,15 +346,22 @@ export function MarketChat() {
 
 	const chatStatus = compareStreaming ? "submitted" : status;
 
-	const compareSharedContext = useMemo(
-		() => ({
+	const compareSharedContext = useMemo(() => {
+		if (!encryptedDrishtiKey) return null;
+		return {
 			sessionId: activeSessionId,
 			memoryContext,
 			portfolioContext,
 			enabledSubAgents,
-		}),
-		[activeSessionId, memoryContext, portfolioContext, enabledSubAgents],
-	);
+			drishtiApiKey: encryptedDrishtiKey,
+		};
+	}, [
+		activeSessionId,
+		memoryContext,
+		portfolioContext,
+		enabledSubAgents,
+		encryptedDrishtiKey,
+	]);
 
 	const handleCompareRegisterStop = useCallback((stopAll: () => void) => {
 		compareStopAllRef.current = stopAll;
@@ -357,11 +381,25 @@ export function MarketChat() {
 		[canChat, openModelConfig, sendMessage],
 	);
 
+	const hasModelKey =
+		hasStoredApiKey(activeProvider) || activeProvider === "ollama";
+	const hasDrishtiKey = hasStoredDrishtiApiKey();
+
 	const inputInfoBar =
 		!canChat && !infoBarDismissed
 			? {
-					title: "API key required",
-					description: "Save one in Configuration.",
+					title:
+						!hasModelKey && !hasDrishtiKey
+							? "API keys required"
+							: !hasDrishtiKey
+								? "Drishti MCP API key required"
+								: "Model API key required",
+					description:
+						!hasModelKey && !hasDrishtiKey
+							? "Save your model and Drishti MCP keys in Configuration."
+							: !hasDrishtiKey
+								? "Save your Drishti MCP key in Configuration."
+								: "Save your model API key in Configuration.",
 					position: "bottom" as const,
 					onClose: () => setInfoBarDismissed(true),
 					action: {
@@ -408,7 +446,7 @@ export function MarketChat() {
 					</div>
 					{!configReady ? (
 						<DrishtiLoader fullscreen label="Loading configuration" />
-					) : showCompareResults && compareRun ? (
+					) : showCompareResults && compareRun && compareSharedContext ? (
 						<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 							<ModelCompareResults
 								catalogModels={catalogModels}
