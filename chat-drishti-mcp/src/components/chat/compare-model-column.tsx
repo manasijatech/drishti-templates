@@ -238,7 +238,7 @@ export function CompareModelColumn({
 								message: error.message,
 							},
 						],
-					},
+					} as unknown as UIMessage,
 				] as UIMessage[])
 			: messages;
 

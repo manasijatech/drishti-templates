@@ -375,7 +375,7 @@ export function MarketChat() {
 	const compareSharedContext = useMemo(() => {
 		if (!encryptedDrishtiKey) return null;
 		return {
-			sessionId: activeSessionId,
+			sessionId: activeSessionId ?? undefined,
 			memoryContext,
 			portfolioContext,
 			enabledSubAgents,
