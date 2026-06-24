@@ -140,6 +140,7 @@ export interface ModelCompareResult {
 export interface CompareChatRequestBody {
 	messages: UIMessage[];
 	modelConfigs: EncryptedModelConfig[];
+	drishtiApiKey: EncryptedApiKeyCredential;
 	sessionId?: string;
 	memoryContext?: string;
 	portfolioContext?: string;

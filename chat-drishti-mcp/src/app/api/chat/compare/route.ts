@@ -8,6 +8,7 @@ import {
 } from "~/lib/guardrails";
 import {
 	hasEncryptedApiKey,
+	resolveDrishtiApiKeyFromEncrypted,
 	resolveModelConfigFromEncrypted,
 } from "~/lib/model-config";
 import {
@@ -48,9 +49,15 @@ const encryptedModelConfigSchema = z.object({
 	baseUrl: z.string().optional(),
 });
 
+const encryptedApiKeySchema = z.object({
+	encryptedApiKey: z.string(),
+	iv: z.string(),
+});
+
 const compareRequestSchema = z.object({
 	messages: z.array(uiMessageSchema).min(1),
 	modelConfigs: z.array(encryptedModelConfigSchema).min(MODEL_COMPARE_MIN).max(MODEL_COMPARE_MAX),
+	drishtiApiKey: encryptedApiKeySchema,
 	sessionId: z.string().optional(),
 	memoryContext: z.string().optional(),
 	portfolioContext: z.string().optional(),
@@ -96,6 +103,22 @@ export async function POST(req: Request) {
 			}
 		});
 
+		let drishtiApiKey: string;
+		try {
+			drishtiApiKey = resolveDrishtiApiKeyFromEncrypted(parsed.data.drishtiApiKey);
+		} catch (error) {
+			console.error("[chat/compare] Drishti API key decrypt failed:", error);
+			return NextResponse.json(
+				{
+					error:
+						error instanceof Error
+							? error.message
+							: "Could not decrypt Drishti MCP API key. Re-save it in Configuration.",
+				},
+				{ status: 401 },
+			);
+		}
+
 		requestMessages = parsed.data.messages;
 
 		const guardrailCheck = validateChatInput(requestMessages);
@@ -113,6 +136,7 @@ export async function POST(req: Request) {
 				memoryContext: parsed.data.memoryContext,
 				portfolioContext: parsed.data.portfolioContext,
 				enabledSubAgents: parsed.data.enabledSubAgents,
+				drishtiApiKey,
 			},
 			modelConfigs,
 			{ signal: req.signal },
