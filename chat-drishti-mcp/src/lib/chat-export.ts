@@ -3,6 +3,7 @@ import type { UIMessage } from "ai";
 type ChatExportInput = {
 	title: string;
 	messages: UIMessage[];
+	includeToolCalls?: boolean;
 	exportedAt?: Date;
 };
 
@@ -15,6 +16,7 @@ type ComparisonChatExportInput = {
 	title: string;
 	query: string;
 	results: ComparisonExportResult[];
+	includeToolCalls?: boolean;
 	exportedAt?: Date;
 };
 
@@ -57,7 +59,7 @@ function toolCallContent(part: Record<string, unknown>): string {
 	return sections.join("\n\n");
 }
 
-function partContent(part: unknown): string | null {
+function partContent(part: unknown, includeToolCalls: boolean): string | null {
 	if (!isRecord(part) || typeof part.type !== "string") return null;
 	if (part.type === "text" && typeof part.text === "string") {
 		return part.text.trim();
@@ -81,13 +83,16 @@ function partContent(part: unknown): string | null {
 		return `[Source: ${title}](${part.url})`;
 	}
 	if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
-		return toolCallContent(part);
+		return includeToolCalls ? toolCallContent(part) : null;
 	}
 	return null;
 }
 
-function visibleContent(message: UIMessage): string {
-	return message.parts.map(partContent).filter(Boolean).join("\n\n");
+function visibleContent(message: UIMessage, includeToolCalls: boolean): string {
+	return message.parts
+		.map((part) => partContent(part, includeToolCalls))
+		.filter(Boolean)
+		.join("\n\n");
 }
 
 function roleLabel(role: UIMessage["role"]): string {
@@ -125,12 +130,16 @@ function safeHeading(value: string, fallback: string): string {
 	return value.replace(/\s+/g, " ").trim() || fallback;
 }
 
-function transcript(messages: UIMessage[], headingLevel: 2 | 3): string {
+function transcript(
+	messages: UIMessage[],
+	headingLevel: 2 | 3,
+	includeToolCalls = true,
+): string {
 	const heading = "#".repeat(headingLevel);
 	return messages
 		.map((message) => ({
 			label: roleLabel(message.role),
-			text: visibleContent(message),
+			text: visibleContent(message, includeToolCalls),
 		}))
 		.filter(({ text }) => text.length > 0)
 		.map(({ label, text }) => `${heading} ${label}\n\n${text}`)
@@ -148,20 +157,22 @@ function exportHeader(title: string, exportedAt: Date): string {
 export function buildChatExport({
 	title,
 	messages,
+	includeToolCalls = true,
 	exportedAt = new Date(),
 }: ChatExportInput): string {
-	return `${exportHeader(title, exportedAt)}\n\n${transcript(messages, 2)}\n`;
+	return `${exportHeader(title, exportedAt)}\n\n${transcript(messages, 2, includeToolCalls)}\n`;
 }
 
 export function buildComparisonChatExport({
 	title,
 	query,
 	results,
+	includeToolCalls = true,
 	exportedAt = new Date(),
 }: ComparisonChatExportInput): string {
 	const sections = results
 		.map(({ label, messages }) => {
-			const resultTranscript = transcript(messages, 3);
+			const resultTranscript = transcript(messages, 3, includeToolCalls);
 			if (!resultTranscript) return "";
 			return `## ${safeHeading(label, "Model response")}\n\n${resultTranscript}`;
 		})

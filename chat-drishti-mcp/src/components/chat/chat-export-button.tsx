@@ -4,6 +4,12 @@ import { DownloadSimple } from "@phosphor-icons/react";
 import type { UIMessage } from "ai";
 import { Button } from "~/components/ui/button";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import {
 	buildChatExport,
 	buildComparisonChatExport,
 	type ComparisonExportResult,
@@ -21,18 +27,20 @@ type ChatExportSource = {
 
 type ChatExportButtonProps = ChatExportSource & { disabled?: boolean };
 
-function createExport(source: ChatExportSource) {
+function createExport(source: ChatExportSource, includeToolCalls: boolean) {
 	const exportedAt = new Date();
 	const content = source.comparison
 		? buildComparisonChatExport({
 				title: source.title,
 				query: source.comparison.query,
 				results: source.comparison.results,
+				includeToolCalls,
 				exportedAt,
 			})
 		: buildChatExport({
 				title: source.title,
 				messages: source.messages,
+				includeToolCalls,
 				exportedAt,
 			});
 	return {
@@ -41,8 +49,8 @@ function createExport(source: ChatExportSource) {
 	};
 }
 
-function downloadMarkdown(source: ChatExportSource) {
-	const { content, filename } = createExport(source);
+function downloadMarkdown(source: ChatExportSource, includeToolCalls: boolean) {
+	const { content, filename } = createExport(source, includeToolCalls);
 	const url = URL.createObjectURL(
 		new Blob([content], { type: "text/markdown" }),
 	);
@@ -67,14 +75,24 @@ export function ChatExportButton({
 		(messages.length === 0 && (!comparison || comparison.results.length === 0));
 
 	return (
-		<Button
-			disabled={unavailable}
-			onClick={() => downloadMarkdown(source)}
-			size="sm"
-			variant="outline"
-		>
-			<DownloadSimple aria-hidden="true" />
-			Export
-		</Button>
+		<DropdownMenu>
+			<DropdownMenuTrigger
+				disabled={unavailable}
+				render={
+					<Button size="sm" variant="outline">
+						<DownloadSimple aria-hidden="true" />
+						Export
+					</Button>
+				}
+			/>
+			<DropdownMenuContent align="end" className="w-52">
+				<DropdownMenuItem onClick={() => downloadMarkdown(source, true)}>
+					Export with tool calls
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => downloadMarkdown(source, false)}>
+					Export without tool calls
+				</DropdownMenuItem>
+			</DropdownMenuContent>
+		</DropdownMenu>
 	);
 }

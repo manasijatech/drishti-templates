@@ -105,6 +105,33 @@ describe("chat export", () => {
 		expect(exported).toContain("> Error: Quote unavailable");
 	});
 
+	test("can omit tool calls while preserving the conversation", () => {
+		const exported = buildChatExport({
+			title: "Clean transcript",
+			includeToolCalls: false,
+			exportedAt: new Date("2026-09-01T00:00:00.000Z"),
+			messages: [
+				{
+					id: "assistant-clean",
+					role: "assistant",
+					parts: [
+						{
+							type: "tool-get_quote",
+							state: "output-available",
+							input: { symbol: "RELIANCE" },
+							output: { price: 1_500.25 },
+						},
+						{ type: "text", text: "Reliance closed at ₹1,500.25." },
+					],
+				},
+			] as never,
+		});
+
+		expect(exported).toContain("Reliance closed at ₹1,500.25.");
+		expect(exported).not.toContain("Tool call:");
+		expect(exported).not.toContain('"symbol": "RELIANCE"');
+	});
+
 	test("exports each visible model comparison as its own section", () => {
 		const exported = buildComparisonChatExport({
 			title: "Model comparison",
@@ -139,5 +166,38 @@ describe("chat export", () => {
 			"## Gemini 2.5 Flash\n\n### Drishti\n\nGemini answer",
 		);
 		expect(exported).toContain("## GPT-5\n\n### Drishti\n\nGPT answer");
+	});
+
+	test("can omit tool calls from every comparison result", () => {
+		const exported = buildComparisonChatExport({
+			title: "Clean comparison",
+			query: "Compare answers",
+			includeToolCalls: false,
+			exportedAt: new Date("2026-09-01T00:00:00.000Z"),
+			results: [
+				{
+					label: "GPT-5",
+					messages: [
+						{
+							id: "gpt-tools",
+							role: "assistant",
+							parts: [
+								{
+									type: "tool-get_quote",
+									state: "output-available",
+									input: { symbol: "TCS" },
+									output: { price: 3_100 },
+								},
+								{ type: "text", text: "TCS answer" },
+							],
+						},
+					] as never,
+				},
+			],
+		});
+
+		expect(exported).toContain("TCS answer");
+		expect(exported).not.toContain("Tool call:");
+		expect(exported).not.toContain('"symbol": "TCS"');
 	});
 });
