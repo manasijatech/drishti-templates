@@ -22,6 +22,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
+function toolValue(value: unknown): string {
+	try {
+		return JSON.stringify(value, null, 2) ?? String(value);
+	} catch {
+		return String(value);
+	}
+}
+
+function toolCallContent(part: Record<string, unknown>): string {
+	const name =
+		typeof part.toolName === "string"
+			? part.toolName
+			: String(part.type).replace(/^tool-/, "");
+	const status =
+		typeof part.state === "string"
+			? part.state.replaceAll("-", " ")
+			: "unknown";
+	const input = part.input ?? part.args;
+	const output = part.output ?? part.result;
+	const sections = [
+		`### Tool call: ${name}`,
+		`**Status:** ${status.charAt(0).toUpperCase()}${status.slice(1)}`,
+	];
+
+	if (input !== undefined) {
+		sections.push(
+			`**Arguments**\n\n\`\`\`\`json\n${toolValue(input)}\n\`\`\`\``,
+		);
+	}
+	if (output !== undefined) {
+		sections.push(`**Result**\n\n\`\`\`\`json\n${toolValue(output)}\n\`\`\`\``);
+	}
+	return sections.join("\n\n");
+}
+
 function partContent(part: unknown): string | null {
 	if (!isRecord(part) || typeof part.type !== "string") return null;
 	if (part.type === "text" && typeof part.text === "string") {
@@ -46,15 +81,7 @@ function partContent(part: unknown): string | null {
 		return `[Source: ${title}](${part.url})`;
 	}
 	if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
-		const name =
-			typeof part.toolName === "string"
-				? part.toolName
-				: part.type.replace(/^tool-/, "");
-		const state =
-			typeof part.state === "string"
-				? ` — ${part.state.replaceAll("-", " ")}`
-				: "";
-		return `[Tool activity: ${name}${state}]`;
+		return toolCallContent(part);
 	}
 	return null;
 }

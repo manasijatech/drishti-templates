@@ -18,7 +18,7 @@ import { ChatConfigPanel, type ConfigFocusTarget } from "~/components/chat/chat-
 import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
 import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
-import { ChatShareMenu } from "~/components/chat/chat-share-menu";
+import { ChatExportButton } from "~/components/chat/chat-export-button";
 import {
 	ModelCompareResults,
 	type CompareRun,
@@ -383,10 +383,10 @@ export function MarketChat() {
 	const chatStatus = compareStreaming ? "submitted" : status;
 	const activeSession = sessions.find((session) => session.id === activeSessionId);
 	const activeChatTitle = activeSession?.title ?? "New chat";
-	const shareTitle = showCompareResults
+	const exportTitle = showCompareResults
 		? `Model comparison: ${compareRun.query}`
 		: activeChatTitle;
-	const shareDisabled = showCompareResults
+	const exportDisabled = showCompareResults
 		? compareStreaming || compareExportResults.length === 0
 		: messages.length === 0 || status === "streaming" || status === "submitted";
 
@@ -486,7 +486,7 @@ export function MarketChat() {
 						<p className="min-w-0 flex-1 truncate font-medium text-sm">
 							{activeChatTitle}
 						</p>
-						<ChatShareMenu
+						<ChatExportButton
 							comparison={
 								showCompareResults
 									? {
@@ -495,9 +495,9 @@ export function MarketChat() {
 										}
 									: undefined
 							}
-							disabled={shareDisabled}
+							disabled={exportDisabled}
 							messages={messages}
-							title={shareTitle}
+							title={exportTitle}
 						/>
 						<div className="lg:hidden">
 							<ChatConfigSheet

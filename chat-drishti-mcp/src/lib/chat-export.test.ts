@@ -63,7 +63,7 @@ describe("chat export", () => {
 		).toBe("tcs-infosys-q1-2026-09-01.md");
 	});
 
-	test("preserves visible attachments, errors, and tool activity", () => {
+	test("preserves visible attachments, errors, and detailed tool calls", () => {
 		const exported = buildChatExport({
 			title: "Rich chat",
 			exportedAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -80,7 +80,12 @@ describe("chat export", () => {
 					id: "assistant-rich",
 					role: "assistant",
 					parts: [
-						{ type: "tool-get_quote", state: "output-available" },
+						{
+							type: "tool-get_quote",
+							state: "output-available",
+							input: { symbol: "RELIANCE" },
+							output: { price: 1_500.25, currency: "INR" },
+						},
 						{ type: "error", message: "Quote unavailable" },
 					],
 				},
@@ -89,7 +94,14 @@ describe("chat export", () => {
 
 		expect(exported).toContain("[Attachment: annual-report.pdf]");
 		expect(exported).toContain("[Image attachment]");
-		expect(exported).toContain("[Tool activity: get_quote — output available]");
+		expect(exported).toContain("### Tool call: get_quote");
+		expect(exported).toContain("**Status:** Output available");
+		expect(exported).toContain(
+			'**Arguments**\n\n````json\n{\n  "symbol": "RELIANCE"\n}\n````',
+		);
+		expect(exported).toContain(
+			'**Result**\n\n````json\n{\n  "price": 1500.25,\n  "currency": "INR"\n}\n````',
+		);
 		expect(exported).toContain("> Error: Quote unavailable");
 	});
 
