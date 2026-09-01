@@ -1,16 +1,26 @@
 "use client";
 
 import { X } from "@phosphor-icons/react";
+import type { UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentChatProps } from "~/components/agent-elements/types";
 import {
-	CompareModelColumn,
+	type CompareColumnKey,
 	type CompareColumnMeta,
+	CompareModelColumn,
 	type CompareRun,
+	compareColumnKey,
 } from "~/components/chat/compare-model-column";
 import { Button } from "~/components/ui/button";
+import {
+	type ComparisonExportResult,
+	hasExportableChatContent,
+} from "~/lib/chat-export";
+import {
+	type CatalogModel,
+	getModelDisplayName,
+} from "~/lib/openrouter-models-core";
 import { formatUsd } from "~/lib/query-cost";
-import type { CatalogModel } from "~/lib/openrouter-models-core";
 import type {
 	EncryptedApiKeyCredential,
 	EncryptedModelConfig,
@@ -40,6 +50,7 @@ type ModelCompareResultsProps = {
 	onUseModel?: (provider: ModelProviderId, model: string) => void;
 	onRegisterStop?: (stopAll: () => void) => void;
 	onStreamingChange?: (streaming: boolean) => void;
+	onExportChange?: (results: ComparisonExportResult[]) => void;
 };
 
 export function ModelCompareResults({
@@ -53,39 +64,60 @@ export function ModelCompareResults({
 	onUseModel,
 	onRegisterStop,
 	onStreamingChange,
+	onExportChange,
 }: ModelCompareResultsProps) {
 	const [sortBy, setSortBy] = useState<SortKey>("cost");
-	const [columnMeta, setColumnMeta] = useState<Record<string, CompareColumnMeta>>(
+	const [columnMeta, setColumnMeta] = useState<
+		Partial<Record<CompareColumnKey, CompareColumnMeta>>
+	>({});
+	const stopHandlersRef = useRef<Partial<Record<CompareColumnKey, () => void>>>(
 		{},
 	);
-	const stopHandlersRef = useRef<Record<string, () => void>>({});
+	const [columnMessages, setColumnMessages] = useState<
+		Partial<Record<CompareColumnKey, UIMessage[]>>
+	>({});
 
-	const handleMetaUpdate = useCallback((key: string, meta: CompareColumnMeta) => {
-		setColumnMeta((current) => {
-			const prev = current[key];
-			if (
-				prev &&
-				prev.provider === meta.provider &&
-				prev.model === meta.model &&
-				prev.usage === meta.usage &&
-				prev.estimatedCost === meta.estimatedCost &&
-				prev.isStreaming === meta.isStreaming &&
-				prev.error === meta.error &&
-				prev.durationMs === meta.durationMs
-			) {
-				return current;
-			}
-			return { ...current, [key]: meta };
-		});
-	}, []);
+	const handleMetaUpdate = useCallback(
+		(key: CompareColumnKey, meta: CompareColumnMeta) => {
+			setColumnMeta((current) => {
+				const prev = current[key];
+				if (
+					prev &&
+					prev.provider === meta.provider &&
+					prev.model === meta.model &&
+					prev.usage === meta.usage &&
+					prev.estimatedCost === meta.estimatedCost &&
+					prev.isStreaming === meta.isStreaming &&
+					prev.error === meta.error &&
+					prev.durationMs === meta.durationMs
+				) {
+					return current;
+				}
+				return { ...current, [key]: meta };
+			});
+		},
+		[],
+	);
 
-	const handleRegisterStop = useCallback((key: string, stop: () => void) => {
-		stopHandlersRef.current[key] = stop;
-	}, []);
+	const handleRegisterStop = useCallback(
+		(key: CompareColumnKey, stop: () => void) => {
+			stopHandlersRef.current[key] = stop;
+		},
+		[],
+	);
+
+	const handleMessagesUpdate = useCallback(
+		(key: CompareColumnKey, messages: UIMessage[]) => {
+			setColumnMessages((current) =>
+				current[key] === messages ? current : { ...current, [key]: messages },
+			);
+		},
+		[],
+	);
 
 	const stopAll = useCallback(() => {
 		for (const stop of Object.values(stopHandlersRef.current)) {
-			stop();
+			stop?.();
 		}
 	}, []);
 
@@ -95,8 +127,8 @@ export function ModelCompareResults({
 
 	const sortedModels = useMemo(() => {
 		return [...compareModels].sort((a, b) => {
-			const aKey = `${a.provider}:${a.model}`;
-			const bKey = `${b.provider}:${b.model}`;
+			const aKey = compareColumnKey(a);
+			const bKey = compareColumnKey(b);
 			const aMeta = columnMeta[aKey];
 			const bMeta = columnMeta[bKey];
 
@@ -118,6 +150,7 @@ export function ModelCompareResults({
 		let sum = 0;
 		let hasCost = false;
 		for (const meta of Object.values(columnMeta)) {
+			if (!meta) continue;
 			if (meta.estimatedCost === null) continue;
 			hasCost = true;
 			sum += meta.estimatedCost;
@@ -125,17 +158,41 @@ export function ModelCompareResults({
 		return hasCost ? sum : null;
 	}, [columnMeta]);
 
-	const isAnyStreaming = Object.values(columnMeta).some((meta) => meta.isStreaming);
+	const allModelsReported = compareModels.every(
+		(target) => columnMeta[compareColumnKey(target)],
+	);
+	const isAnyStreaming =
+		!allModelsReported ||
+		Object.values(columnMeta).some((meta) => meta?.isStreaming);
 
 	useEffect(() => {
 		onStreamingChange?.(isAnyStreaming);
 	}, [isAnyStreaming, onStreamingChange]);
 
+	useEffect(() => {
+		const results = compareModels
+			.map((target) => {
+				const messages = columnMessages[compareColumnKey(target)] ?? [];
+				return {
+					label: getModelDisplayName(
+						catalogModels,
+						target.provider,
+						target.model,
+					),
+					messages,
+				};
+			})
+			.filter(({ messages }) => hasExportableChatContent(messages));
+		onExportChange?.(results);
+	}, [catalogModels, columnMessages, compareModels, onExportChange]);
+
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
 			<div className="flex flex-wrap items-center justify-between gap-2 border-border border-b px-4 py-3">
 				<div className="min-w-0 space-y-0.5">
-					<p className="font-medium text-foreground text-sm">Model comparison</p>
+					<p className="font-medium text-foreground text-sm">
+						Model comparison
+					</p>
 					<p className="truncate text-muted-foreground text-xs">{run.query}</p>
 				</div>
 				<div className="flex items-center gap-2">
@@ -185,12 +242,13 @@ export function ModelCompareResults({
 					}
 				>
 					{sortedModels.map((target) => {
-						const key = `${target.provider}:${target.model}`;
+						const key = compareColumnKey(target);
 						return (
 							<CompareModelColumn
 								catalogModels={catalogModels}
 								encryptedConfig={getEncryptedConfigForTarget(target)}
 								key={key}
+								onMessagesUpdate={handleMessagesUpdate}
 								onMetaUpdate={handleMetaUpdate}
 								onRegisterStop={handleRegisterStop}
 								onUseModel={onUseModel}

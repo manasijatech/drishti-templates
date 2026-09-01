@@ -43,6 +43,8 @@ export type CompareColumnMeta = {
 	error?: string;
 };
 
+export type CompareColumnKey = `${ModelProviderId}:${string}`;
+
 type CompareSharedContext = {
 	sessionId?: string;
 	memoryContext?: string;
@@ -58,12 +60,13 @@ type CompareModelColumnProps = {
 	sharedContext: CompareSharedContext;
 	catalogModels: CatalogModel[];
 	toolRenderers: NonNullable<AgentChatProps["toolRenderers"]>;
-	onMetaUpdate: (key: string, meta: CompareColumnMeta) => void;
-	onRegisterStop: (key: string, stop: () => void) => void;
+	onMetaUpdate: (key: CompareColumnKey, meta: CompareColumnMeta) => void;
+	onMessagesUpdate: (key: CompareColumnKey, messages: UIMessage[]) => void;
+	onRegisterStop: (key: CompareColumnKey, stop: () => void) => void;
 	onUseModel?: (provider: ModelProviderId, model: string) => void;
 };
 
-function columnKey(target: ModelCompareTarget): string {
+export function compareColumnKey(target: ModelCompareTarget): CompareColumnKey {
 	return `${target.provider}:${target.model}`;
 }
 
@@ -80,10 +83,11 @@ export function CompareModelColumn({
 	catalogModels,
 	toolRenderers,
 	onMetaUpdate,
+	onMessagesUpdate,
 	onRegisterStop,
 	onUseModel,
 }: CompareModelColumnProps) {
-	const key = columnKey(target);
+	const key = compareColumnKey(target);
 	const lastRunIdRef = useRef<string | null>(null);
 	const hasSeededRef = useRef(false);
 	const startedAtRef = useRef<number | null>(null);
@@ -113,7 +117,14 @@ export function CompareModelColumn({
 					};
 				},
 			}),
-		[encryptedConfig, key, run?.id, sharedContext.memoryContext, sharedContext.portfolioContext, sharedContext.enabledSubAgents],
+		[
+			encryptedConfig,
+			key,
+			run?.id,
+			sharedContext.memoryContext,
+			sharedContext.portfolioContext,
+			sharedContext.enabledSubAgents,
+		],
 	);
 
 	const { messages, sendMessage, status, stop, setMessages, error } = useChat({
@@ -225,22 +236,29 @@ export function CompareModelColumn({
 		target.model,
 	);
 
-	const listMessages =
-		error && messages.length === 0
-			? ([
-					{
-						id: `compare-error-${key}`,
-						role: "assistant",
-						parts: [
-							{
-								type: "error",
-								title: "Request failed",
-								message: error.message,
-							},
-						],
-					} as unknown as UIMessage,
-				] as UIMessage[])
-			: messages;
+	const listMessages = useMemo(
+		() =>
+			error && messages.length === 0
+				? ([
+						{
+							id: `compare-error-${key}`,
+							role: "assistant",
+							parts: [
+								{
+									type: "error",
+									title: "Request failed",
+									message: error.message,
+								},
+							],
+						} as unknown as UIMessage,
+					] as UIMessage[])
+				: messages,
+		[error, key, messages],
+	);
+
+	useEffect(() => {
+		onMessagesUpdate(key, listMessages);
+	}, [key, listMessages, onMessagesUpdate]);
 
 	return (
 		<article
@@ -276,9 +294,7 @@ export function CompareModelColumn({
 				<div className="flex flex-wrap gap-1.5 text-[11px]">
 					<span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-foreground">
 						<Coins className="size-3 text-muted-foreground" />
-						{target.provider === "ollama"
-							? "Local"
-							: formatUsd(estimatedCost)}
+						{target.provider === "ollama" ? "Local" : formatUsd(estimatedCost)}
 					</span>
 					{usage ? (
 						<span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-foreground">

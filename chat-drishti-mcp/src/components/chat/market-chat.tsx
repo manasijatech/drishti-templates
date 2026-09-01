@@ -18,6 +18,7 @@ import { ChatConfigPanel, type ConfigFocusTarget } from "~/components/chat/chat-
 import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
 import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
+import { ChatShareMenu } from "~/components/chat/chat-share-menu";
 import {
 	ModelCompareResults,
 	type CompareRun,
@@ -26,6 +27,7 @@ import { QueryCostMenu } from "~/components/chat/query-cost-menu";
 import { OnboardingDialog } from "~/components/onboarding/onboarding-dialog";
 import { Button } from "~/components/ui/button";
 import { CHAT_TOOL_RENDERERS } from "~/lib/chat-tool-renderers";
+import type { ComparisonExportResult } from "~/lib/chat-export";
 import { getModelDisplayName } from "~/lib/openrouter-models-core";
 import {
 	MODEL_COMPARE_MIN,
@@ -135,6 +137,9 @@ export function MarketChat() {
 	const [compareRun, setCompareRun] = useState<CompareRun | null>(null);
 	const [compareStreaming, setCompareStreaming] = useState(false);
 	const [compareDraft, setCompareDraft] = useState("");
+	const [compareExportResults, setCompareExportResults] = useState<
+		ComparisonExportResult[]
+	>([]);
 	const compareStopAllRef = useRef<(() => void) | null>(null);
 
 	useEffect(() => {
@@ -302,6 +307,8 @@ export function MarketChat() {
 				}
 
 				compareStopAllRef.current?.();
+				setCompareStreaming(true);
+				setCompareExportResults([]);
 				setCompareRun({
 					id: crypto.randomUUID(),
 					query: content.trim(),
@@ -336,6 +343,7 @@ export function MarketChat() {
 		compareStopAllRef.current?.();
 		setCompareRun(null);
 		setCompareStreaming(false);
+		setCompareExportResults([]);
 	}, []);
 
 	const handleUseComparedModel = useCallback(
@@ -344,6 +352,7 @@ export function MarketChat() {
 			setCompareMode(false);
 			setCompareRun(null);
 			setCompareStreaming(false);
+			setCompareExportResults([]);
 		},
 		[setActiveModel, setCompareMode],
 	);
@@ -370,7 +379,16 @@ export function MarketChat() {
 		[messages],
 	);
 
+	const showCompareResults = compareRun !== null;
 	const chatStatus = compareStreaming ? "submitted" : status;
+	const activeSession = sessions.find((session) => session.id === activeSessionId);
+	const activeChatTitle = activeSession?.title ?? "New chat";
+	const shareTitle = showCompareResults
+		? `Model comparison: ${compareRun.query}`
+		: activeChatTitle;
+	const shareDisabled = showCompareResults
+		? compareStreaming || compareExportResults.length === 0
+		: messages.length === 0 || status === "streaming" || status === "submitted";
 
 	const compareSharedContext = useMemo(() => {
 		if (!encryptedDrishtiKey) return null;
@@ -393,7 +411,6 @@ export function MarketChat() {
 		compareStopAllRef.current = stopAll;
 	}, []);
 
-	const showCompareResults = compareRun !== null;
 	const showSidebarSuggestions = messages.length === 0 && !showCompareResults;
 
 	const handleSidebarPrompt = useCallback(
@@ -457,20 +474,39 @@ export function MarketChat() {
 					watchlists={watchlists}
 				/>
 				<div className="flex min-h-0 flex-1 flex-col bg-background">
-					<div className="flex items-center gap-2 border-border border-b px-3 py-2 lg:hidden">
+					<div className="flex items-center gap-2 border-border border-b px-3 py-2">
 						<Button
+							className="lg:hidden"
 							onClick={() => createSession()}
 							size="sm"
 							variant="outline"
 						>
 							New chat
 						</Button>
-						<ChatConfigSheet
-							focusSignal={sheetFocus.signal}
-							focusTarget={sheetFocus.target}
-							onOpenChange={setConfigSheetOpen}
-							open={configSheetOpen}
+						<p className="min-w-0 flex-1 truncate font-medium text-sm">
+							{activeChatTitle}
+						</p>
+						<ChatShareMenu
+							comparison={
+								showCompareResults
+									? {
+											query: compareRun.query,
+											results: compareExportResults,
+										}
+									: undefined
+							}
+							disabled={shareDisabled}
+							messages={messages}
+							title={shareTitle}
 						/>
+						<div className="lg:hidden">
+							<ChatConfigSheet
+								focusSignal={sheetFocus.signal}
+								focusTarget={sheetFocus.target}
+								onOpenChange={setConfigSheetOpen}
+								open={configSheetOpen}
+							/>
+						</div>
 					</div>
 					{!configReady ? (
 						<DrishtiLoader fullscreen label="Loading configuration" />
@@ -480,7 +516,9 @@ export function MarketChat() {
 								catalogModels={catalogModels}
 								compareModels={compareModels}
 								getEncryptedConfigForTarget={getEncryptedConfigForTarget}
+								key={compareRun.id}
 								onClose={handleCloseCompare}
+								onExportChange={setCompareExportResults}
 								onRegisterStop={handleCompareRegisterStop}
 								onStreamingChange={setCompareStreaming}
 								onUseModel={handleUseComparedModel}
