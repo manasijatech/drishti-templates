@@ -7,6 +7,10 @@ from typing import Any, Protocol
 from .config import CHANNELS, Channel, MonitorConfig
 
 
+class WebSocketPlanRequired(RuntimeError):
+    """Raised when Drishti reports that the API key has no WebSocket entitlement."""
+
+
 class WebSocketEvent(Protocol):
     kind: str
 
@@ -49,8 +53,33 @@ async def watch_sdk(
                     )
                 elif on_control is not None:
                     on_control("invalid_data", _event_details(event))
-            elif on_control is not None:
-                on_control(event.kind, _event_details(event))
+            else:
+                details = _event_details(event)
+                if event.kind == "error" and _is_missing_websocket_access(details):
+                    raise WebSocketPlanRequired
+                if on_control is not None:
+                    on_control(event.kind, details)
+
+
+def _is_missing_websocket_access(details: dict[str, Any]) -> bool:
+    code = str(details.get("code") or "").lower()
+    message = str(details.get("message") or "").lower()
+    explicit_codes = {
+        "403",
+        "forbidden",
+        "upgrade_required",
+        "websocket_not_entitled",
+        "websocket_entitlement_required",
+    }
+    access_phrases = (
+        "websocket entitlement",
+        "websocket access",
+        "paid plan",
+        "starter plan",
+        "upgrade your plan",
+        "sandbox plan",
+    )
+    return code in explicit_codes or any(phrase in message for phrase in access_phrases)
 
 
 def _event_details(event: WebSocketEvent) -> dict[str, Any]:

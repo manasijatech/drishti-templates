@@ -1,8 +1,10 @@
 from asyncio import run
 from types import SimpleNamespace
 
+import pytest
+
 from drishti_monitor.config import Coverage, MonitorConfig
-from drishti_monitor.socket import watch_sdk
+from drishti_monitor.socket import WebSocketPlanRequired, watch_sdk
 
 
 class FakeManagedSession:
@@ -66,3 +68,27 @@ def test_managed_sdk_watch_recovers_subscribes_and_only_handles_data():
     assert handled[0][0] == {"channel": "earnings", "data": {"id": "e1"}}
     assert handled[0][1].endswith("+00:00")
     assert [kind for kind, _details in controls] == ["subscribed", "heartbeat", "error"]
+
+
+class MissingPlanSession(FakeManagedSession):
+    async def events(self):
+        yield SimpleNamespace(
+            kind="error",
+            code="403",
+            message="WebSocket entitlement requires a paid plan",
+        )
+
+
+def test_managed_sdk_watch_reports_missing_websocket_plan():
+    client = FakeManagedClient([])
+    client.session = MissingPlanSession([])
+
+    with pytest.raises(WebSocketPlanRequired):
+        run(
+            watch_sdk(
+                client,
+                socket_config(),
+                lambda: None,
+                lambda _envelope, _received: None,
+            )
+        )

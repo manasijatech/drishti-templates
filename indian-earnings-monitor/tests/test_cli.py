@@ -30,9 +30,10 @@ def write_config(path):
 
 
 class ClosingSdk:
-    def __init__(self, error=None):
+    def __init__(self, error=None, websocket_addons=None):
         self.close_count = 0
         self.error = error
+        self.websocket_addons = websocket_addons
 
     def close(self):
         self.close_count += 1
@@ -62,6 +63,15 @@ class ClosingSdk:
 
     def get_concalls_transcript(self, **_kwargs):
         return {}
+
+    def get_account(self):
+        addons = self.websocket_addons
+        if addons is None:
+            addons = [
+                {"product": product, "enabled": True, "tier": "starter_100"}
+                for product in ("earnings", "news", "concalls")
+            ]
+        return {"data": {"websocket_addons": addons}}
 
 
 def live_args(config_path, state_path, command):
@@ -192,6 +202,23 @@ def test_simple_run_command_uses_the_async_sdk_path(tmp_path, monkeypatch, capsy
 
     assert main(live_args(config_path, state_path, "run")) == 0
     assert "Monitor stopped." in capsys.readouterr().out
+    assert sdk.close_count == 1
+
+
+def test_run_directs_sandbox_users_to_purchase_starter(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    state_path = tmp_path / "state"
+    write_config(config_path)
+    sdk = ClosingSdk(websocket_addons=[])
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+
+    with pytest.raises(SystemExit) as error:
+        main(live_args(config_path, state_path, "run"))
+
+    message = str(error.value)
+    assert "Purchase the Starter plan" in message
+    assert "https://platform.manasija.in/developer-portal/plans" in message
     assert sdk.close_count == 1
 
 

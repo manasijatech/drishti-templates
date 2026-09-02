@@ -29,6 +29,10 @@ drishti-monitor check  # fetch new updates once, then exit
 drishti-monitor run    # keep watching; press Ctrl+C to stop
 ```
 
+`run` checks the account's WebSocket entitlement before connecting. Sandbox keys can still use
+`check`, but live WebSocket monitoring requires Starter or higher. When access is missing, the
+CLI links directly to [Purchase the Starter plan](https://platform.manasija.in/developer-portal/plans).
+
 See what was collected:
 
 ```bash

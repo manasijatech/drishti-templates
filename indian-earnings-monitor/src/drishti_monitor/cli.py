@@ -14,8 +14,14 @@ from .config import CHANNELS, MonitorConfig, load_config
 from .model import ResearchEvent
 from .monitor import Monitor
 from .rest import RestClient, create_sdk_client
-from .socket import watch_sdk
+from .socket import WebSocketPlanRequired, watch_sdk
 from .store import Store
+
+PLANS_URL = "https://platform.manasija.in/developer-portal/plans"
+WEBSOCKET_UPGRADE_MESSAGE = (
+    "WebSocket monitoring requires the Starter plan or higher.\n"
+    f"Purchase the Starter plan: {PLANS_URL}"
+)
 
 
 def console_delivery(event: Any) -> None:
@@ -49,6 +55,24 @@ def _recovery_is_recent(
         if age < timedelta(0) or age > maximum_age:
             return False
     return True
+
+
+def _has_websocket_access(account_response: object, config: MonitorConfig) -> bool | None:
+    if not isinstance(account_response, dict):
+        return None
+    account = account_response.get("data")
+    if not isinstance(account, dict):
+        return None
+    addons = account.get("websocket_addons")
+    if not isinstance(addons, list):
+        return None
+    enabled_products = {
+        str(addon.get("product"))
+        for addon in addons
+        if isinstance(addon, dict) and addon.get("enabled", True) is True
+    }
+    required_products = {channel for coverage in config.coverage for channel in coverage.channels}
+    return "*" in enabled_products or required_products <= enabled_products
 
 
 class FixtureSdkClient:
@@ -184,6 +208,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"calendar={len(items)}")
                 return 0
             if command == "watch":
+                websocket_access = _has_websocket_access(sdk.get_account(), config)
+                if websocket_access is False:
+                    raise SystemExit(WEBSOCKET_UPGRADE_MESSAGE)
 
                 def recover() -> None:
                     recovery_time = datetime.now(UTC)
@@ -213,6 +240,8 @@ def main(argv: list[str] | None = None) -> int:
                             lambda kind, details: store.audit(f"websocket_{kind}", **details),
                         )
                     )
+                except WebSocketPlanRequired:
+                    raise SystemExit(WEBSOCKET_UPGRADE_MESSAGE) from None
                 except KeyboardInterrupt:
                     print("Monitor stopped.")
                 return 0
