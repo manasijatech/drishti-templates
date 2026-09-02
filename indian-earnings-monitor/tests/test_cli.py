@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 import drishti_monitor.cli as cli
 from drishti_monitor.cli import main
 from drishti_monitor.config import Coverage, MonitorConfig
@@ -23,6 +25,45 @@ def write_config(path):
             }
         )
     )
+
+
+class ClosingSdk:
+    def __init__(self, error=None):
+        self.close_count = 0
+        self.error = error
+
+    def close(self):
+        self.close_count += 1
+
+    def _page(self):
+        if self.error is not None:
+            raise self.error
+        return {"data": [], "has_next": False}
+
+    def get_earnings(self, **_kwargs):
+        return self._page()
+
+    def get_news(self, **_kwargs):
+        return self._page()
+
+    def get_concalls(self, **_kwargs):
+        return self._page()
+
+    def get_upcoming_earnings(self, **_kwargs):
+        return self._page()
+
+    def get_upcoming_concalls(self, **_kwargs):
+        return self._page()
+
+    def get_earnings_attachments(self, **_kwargs):
+        return self._page()
+
+    def get_concalls_transcript(self, **_kwargs):
+        return {}
+
+
+def live_args(config_path, state_path, command):
+    return ["--config", str(config_path), "--state-dir", str(state_path), command]
 
 
 def test_cli_lists_calendar_and_failures_and_mutates_review_queue(tmp_path, capsys):
@@ -108,7 +149,7 @@ def test_cli_watch_runs_the_async_sdk_path(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     state_path = tmp_path / "state"
     write_config(config_path)
-    sdk = object()
+    sdk = ClosingSdk()
     observed = []
 
     async def fake_watch(client, config, recover, handle, on_control):
@@ -131,3 +172,27 @@ def test_cli_watch_runs_the_async_sdk_path(tmp_path, monkeypatch):
         == 0
     )
     assert observed[0][0:2] == (sdk, "RELIANCE")
+    assert sdk.close_count == 1
+
+
+def test_cli_closes_sdk_after_successful_finite_live_command(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    write_config(config_path)
+    sdk = ClosingSdk()
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+
+    assert main(live_args(config_path, tmp_path / "state", "live-smoke")) == 0
+    assert sdk.close_count == 1
+
+
+def test_cli_closes_sdk_when_live_operation_raises(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    write_config(config_path)
+    sdk = ClosingSdk(RuntimeError("SDK failure"))
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+
+    with pytest.raises(RuntimeError, match="SDK failure"):
+        main(live_args(config_path, tmp_path / "state", "calendar-refresh"))
+    assert sdk.close_count == 1

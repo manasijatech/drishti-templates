@@ -114,34 +114,44 @@ def main(argv: list[str] | None = None) -> int:
         sdk = create_sdk_client(
             api_key, os.environ.get("DRISHTI_BASE_URL", "https://developers.manasija.in")
         )
-        rest = RestClient(sdk)
-        if args.command == "resolve-source":
-            event = (
-                monitor.resolve_earnings_source(rest, args.provider_id)
-                if args.channel == "earnings"
-                else monitor.resolve_concall_sources(rest, args.provider_id)
-            )
-            print(json.dumps(event.to_dict(), sort_keys=True))
-            return 0
-        if args.command == "calendar-refresh":
-            items = monitor.refresh_calendar(rest)
-            print(f"calendar={len(items)}")
-            return 0
-        if args.command == "watch":
-
-            def recover() -> None:
-                monitor.recover(rest, datetime.now(UTC))
-
-            asyncio.run(
-                watch_sdk(
-                    sdk,
-                    config,
-                    recover,
-                    monitor.handle_envelope,
-                    lambda kind, details: store.audit(f"websocket_{kind}", **details),
+        try:
+            rest = RestClient(sdk)
+            if args.command == "resolve-source":
+                event = (
+                    monitor.resolve_earnings_source(rest, args.provider_id)
+                    if args.channel == "earnings"
+                    else monitor.resolve_concall_sources(rest, args.provider_id)
                 )
+                print(json.dumps(event.to_dict(), sort_keys=True))
+                return 0
+            if args.command == "calendar-refresh":
+                items = monitor.refresh_calendar(rest)
+                print(f"calendar={len(items)}")
+                return 0
+            if args.command == "watch":
+
+                def recover() -> None:
+                    monitor.recover(rest, datetime.now(UTC))
+
+                asyncio.run(
+                    watch_sdk(
+                        sdk,
+                        config,
+                        recover,
+                        monitor.handle_envelope,
+                        lambda kind, details: store.audit(f"websocket_{kind}", **details),
+                    )
+                )
+                return 0
+            accepted = monitor.recover(rest, now)
+            calendar = monitor.refresh_calendar(rest)
+            print(
+                f"accepted={len(accepted)} calendar={len(calendar)} "
+                f"queue={sum(1 for _ in store.events())}"
             )
             return 0
+        finally:
+            sdk.close()
     accepted = monitor.recover(rest, now)
     calendar = monitor.refresh_calendar(rest)
     print(
