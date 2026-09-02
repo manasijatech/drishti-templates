@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -7,6 +6,32 @@ from drishti_monitor.config import Coverage, MonitorConfig
 from drishti_monitor.monitor import Monitor
 from drishti_monitor.rest import RestClient
 from drishti_monitor.store import Store
+
+
+class FakeSdk:
+    def __init__(self, responder):
+        self.responder = responder
+
+    def get_earnings(self, **kwargs):
+        return self.responder("earnings", kwargs)
+
+    def get_news(self, **kwargs):
+        return self.responder("news", kwargs)
+
+    def get_concalls(self, **kwargs):
+        return self.responder("concalls", kwargs)
+
+    def get_upcoming_earnings(self, **kwargs):
+        return self.responder("earnings-upcoming", kwargs)
+
+    def get_upcoming_concalls(self, **kwargs):
+        return self.responder("concalls-upcoming", kwargs)
+
+    def get_earnings_attachments(self, **kwargs):
+        return self.responder("earnings-attachments", kwargs)
+
+    def get_concalls_transcript(self, **kwargs):
+        return self.responder("concalls-transcript", kwargs)
 
 
 def config(max_attempts=3):
@@ -45,40 +70,35 @@ def test_rest_recovery_paginates_all_channels_and_sets_checkpoints(tmp_path):
         },
     }
 
-    def get(url, headers):
-        requests.append((url, headers))
-        parsed = urlparse(url)
-        channel = parsed.path.rsplit("/", 1)[-1]
-        page = int(parse_qs(parsed.query)["page"][0])
+    def respond(channel, query):
+        requests.append((channel, query))
+        page = query["page"]
         return {"data": [rows[channel]] if page == 1 else [], "has_next": page == 1}
 
     store = Store(tmp_path)
     accepted = Monitor(config(), store, lambda _event: None).recover(
-        RestClient("https://developers.manasija.in/v1", "secret", get),
+        RestClient(FakeSdk(respond)),
         datetime(2026, 9, 2, 12, tzinfo=UTC),
     )
     assert [event.provider_id for event in accepted] == ["e1", "n1", "c1"]
     assert len(requests) == 6
-    assert all(headers["X-API-Key"] == "secret" for _, headers in requests)
+    assert all(query["symbols"] == ["RELIANCE"] for _, query in requests)
     assert store.checkpoint("concalls") == "2026-09-02T12:00:00+00:00"
 
 
 def test_empty_recovery_is_valid(tmp_path):
     monitor = Monitor(config(), Store(tmp_path), lambda _event: None)
-    rest = RestClient(
-        "https://example.invalid", "x", lambda _url, _headers: {"data": [], "has_next": False}
-    )
+    rest = RestClient(FakeSdk(lambda _product, _query: {"data": [], "has_next": False}))
     assert monitor.recover(rest, datetime(2026, 9, 2, 12, tzinfo=UTC)) == []
 
 
 def test_upcoming_calendar_paginates_and_stays_separate_from_events(tmp_path):
     requests = []
 
-    def get(url, _headers):
-        requests.append(url)
-        parsed = urlparse(url)
-        page = int(parse_qs(parsed.query)["page"][0])
-        if parsed.path.endswith("/earnings/upcoming"):
+    def respond(product, query):
+        requests.append((product, query))
+        page = query["page"]
+        if product == "earnings-upcoming":
             row = {
                 "id": "ue1",
                 "event_id": "event-1",
@@ -101,7 +121,7 @@ def test_upcoming_calendar_paginates_and_stays_separate_from_events(tmp_path):
 
     store = Store(tmp_path)
     monitor = Monitor(config(), store, lambda _event: None)
-    items = monitor.refresh_calendar(RestClient("https://example.invalid/v1", "x", get))
+    items = monitor.refresh_calendar(RestClient(FakeSdk(respond)))
 
     assert len(requests) == 4 and len(items) == 2
     assert list(store.events()) == []
@@ -127,10 +147,9 @@ def test_calendar_refresh_requests_and_saves_only_product_enabled_symbols(tmp_pa
         Coverage("ONLYNEWS", "NSE", "news-desk", "normal", ("news",), (), 30),
     )
 
-    def get(url, _headers):
-        parsed = urlparse(url)
-        product = parsed.path.split("/")[-2]
-        requested[product] = parse_qs(parsed.query)["symbols"][0].split(",")
+    def respond(method, query):
+        product = method.removesuffix("-upcoming")
+        requested[product] = query["symbols"]
         date_field = "date" if product == "earnings" else "meeting_date"
         return {
             "data": [
@@ -142,7 +161,7 @@ def test_calendar_refresh_requests_and_saves_only_product_enabled_symbols(tmp_pa
 
     store = Store(tmp_path)
     Monitor(MonitorConfig(coverage), store, lambda _event: None).refresh_calendar(
-        RestClient("https://example.invalid/v1", "x", get)
+        RestClient(FakeSdk(respond))
     )
 
     assert requested == {"earnings": ["RELIANCE"], "concalls": ["RELIANCE"]}
@@ -223,8 +242,8 @@ def test_complete_calendar_refresh_clears_provisional_ambiguous_matches(tmp_path
         "2026-09-02T09:01:00Z",
     )
 
-    def get(url, _headers):
-        if urlparse(url).path.endswith("/concalls/upcoming"):
+    def respond(product, _query):
+        if product == "concalls-upcoming":
             return {"data": [], "has_next": False}
         return {
             "data": [
@@ -244,7 +263,7 @@ def test_complete_calendar_refresh_clears_provisional_ambiguous_matches(tmp_path
             "has_next": False,
         }
 
-    monitor.refresh_calendar(RestClient("https://example.invalid/v1", "x", get))
+    monitor.refresh_calendar(RestClient(FakeSdk(respond)))
 
     earnings_rows = [item for item in store.calendar() if item["product"] == "earnings"]
     assert len(earnings_rows) == 2
@@ -256,9 +275,8 @@ def test_complete_calendar_refresh_clears_provisional_ambiguous_matches(tmp_path
 def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tmp_path):
     earnings_date = "2026-09-10T00:00:00Z"
 
-    def get(url, _headers):
-        parsed = urlparse(url)
-        if parsed.path.endswith("/earnings/upcoming"):
+    def respond(product, _query):
+        if product == "earnings-upcoming":
             return {
                 "data": [
                     {
@@ -270,7 +288,7 @@ def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tm
                 ],
                 "has_next": False,
             }
-        if parsed.path.endswith("/concalls/upcoming"):
+        if product == "concalls-upcoming":
             return {
                 "data": [
                     {
@@ -282,7 +300,7 @@ def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tm
                 ],
                 "has_next": False,
             }
-        if parsed.path.endswith("/earnings/attachments"):
+        if product == "earnings-attachments":
             return {"data": [{"id": "e1", "status": "ready", "url": "https://source/e1.pdf"}]}
         return {
             "transcript_url": "https://source/c1.pdf",
@@ -291,7 +309,7 @@ def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tm
 
     store = Store(tmp_path)
     monitor = Monitor(config(), store, lambda _event: None)
-    rest = RestClient("https://example.invalid/v1", "x", get)
+    rest = RestClient(FakeSdk(respond))
     monitor.refresh_calendar(rest)
     earnings_date = "2026-09-12T00:00:00Z"
     monitor.refresh_calendar(rest)
@@ -560,8 +578,8 @@ def test_invalid_websocket_envelope_is_a_durable_parse_failure(tmp_path):
 
 
 def test_resolved_artifacts_are_exposed_and_amendments_link_both_versions(tmp_path):
-    def get(url, _headers):
-        if "/earnings/attachments?" in url:
+    def respond(product, _query):
+        if product == "earnings-attachments":
             return {"data": [{"id": "e2", "status": "ready", "url": "https://source/result.pdf"}]}
         return {
             "transcript_url": "https://source/transcript.pdf",
@@ -580,7 +598,7 @@ def test_resolved_artifacts_are_exposed_and_amendments_link_both_versions(tmp_pa
     monitor.handle_envelope(
         {"channel": "concalls", "data": {"id": "c1", **common}}, "2026-09-02T09:03:00Z"
     )
-    rest = RestClient("https://example.invalid/v1", "x", get)
+    rest = RestClient(FakeSdk(respond))
 
     earnings = monitor.resolve_earnings_source(rest, "e2")
     concall = monitor.resolve_concall_sources(rest, "c1")
@@ -596,11 +614,9 @@ def test_recovery_checkpoint_advances_only_after_complete_window_and_restart_is_
     calls = []
     fail_page_two = True
 
-    def get(url, _headers):
+    def respond(channel, query):
         nonlocal fail_page_two
-        parsed = urlparse(url)
-        channel = parsed.path.rsplit("/", 1)[-1]
-        page = int(parse_qs(parsed.query)["page"][0])
+        page = query["page"]
         calls.append((channel, page))
         if channel == "earnings" and page == 2 and fail_page_two:
             fail_page_two = False
@@ -613,7 +629,7 @@ def test_recovery_checkpoint_advances_only_after_complete_window_and_restart_is_
 
     store = Store(tmp_path)
     monitor = Monitor(config(), store, lambda _event: None)
-    rest = RestClient("https://example.invalid/v1", "x", get)
+    rest = RestClient(FakeSdk(respond))
     now = datetime(2026, 9, 2, 12, tzinfo=UTC)
 
     with pytest.raises(OSError, match="page failed"):

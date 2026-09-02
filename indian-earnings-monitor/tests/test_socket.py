@@ -1,17 +1,37 @@
-import json
-
-import pytest
+from asyncio import run
+from types import SimpleNamespace
 
 from drishti_monitor.config import Coverage, MonitorConfig
-from drishti_monitor.socket import RawSubscriptionSession, decode_envelope, run_socket
+from drishti_monitor.socket import watch_sdk
 
 
-class FakeSocket:
-    def __init__(self):
-        self.sent = []
+class FakeManagedSession:
+    def __init__(self, actions):
+        self.actions = actions
 
-    def send(self, payload):
-        self.sent.append(json.loads(payload))
+    async def __aenter__(self):
+        self.actions.append("enter")
+        return self
+
+    async def __aexit__(self, *_args):
+        self.actions.append("exit")
+
+    async def subscribe(self, product, *, symbols, detailed):
+        self.actions.append(("subscribe", product, symbols, detailed))
+
+    async def events(self):
+        yield SimpleNamespace(kind="subscribed", product="earnings")
+        yield SimpleNamespace(kind="heartbeat", sent_at="2026-09-02T12:00:00Z")
+        yield SimpleNamespace(kind="data", channel="earnings", data={"id": "e1"})
+        yield SimpleNamespace(kind="error", code="temporary", message="retrying")
+
+
+class FakeManagedClient:
+    def __init__(self, actions):
+        self.session = FakeManagedSession(actions)
+
+    def websocket(self):
+        return self.session
 
 
 def socket_config():
@@ -23,73 +43,26 @@ def socket_config():
     )
 
 
-def test_separate_subscription_state():
-    config = socket_config()
-    session = RawSubscriptionSession(config)
-    socket = FakeSocket()
-    session.subscribe_all(socket)
-    assert [frame["product"] for frame in socket.sent] == [
-        "earnings",
-        "news",
-        "concalls",
-    ]
-    assert socket.sent[1]["symbols"] == ["RELIANCE", "TCS"]
-
-
-class ScriptedSocket(FakeSocket):
-    def __init__(self, messages):
-        super().__init__()
-        self.messages = iter(messages)
-
-    def recv(self):
-        value = next(self.messages)
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-    def close(self):
-        return None
-
-
-def test_production_loop_ignores_ack_then_recovers_and_resubscribes_after_disconnect():
-    config_value = socket_config()
-    first = ScriptedSocket(
-        [
-            '{"status":"subscribed","product":"news","tier":"starter_100","symbols":["RELIANCE"],"full_feed":false,"detailed":true}',
-            '{"channel":"news","data":{"id":"n1"}}',
-            OSError("disconnect"),
-        ]
-    )
-    second = ScriptedSocket(
-        [
-            '{"status":"subscribed","product":"news","tier":"starter_100","symbols":["RELIANCE"],"full_feed":false,"detailed":true}',
-            '{"channel":"news","data":{"id":"n2"}}',
-            OSError("done"),
-        ]
-    )
-    connections = iter([first, second])
+def test_managed_sdk_watch_recovers_subscribes_and_only_handles_data():
     actions = []
-    events = []
+    handled = []
     controls = []
-
-    run_socket(
-        RawSubscriptionSession(config_value),
-        lambda: actions.append("recover"),
-        lambda envelope, _received: events.append(envelope["data"]["id"]),
-        lambda: next(connections),
-        lambda _delay: actions.append("sleep"),
-        controls.append,
-        max_connections=2,
+    run(
+        watch_sdk(
+            FakeManagedClient(actions),
+            socket_config(),
+            lambda: actions.append("recover"),
+            lambda envelope, received: handled.append((envelope, received)),
+            lambda kind, details: controls.append((kind, details)),
+        )
     )
-
-    assert events == ["n1", "n2"]
-    assert [item["status"] for item in controls] == ["subscribed", "subscribed"]
-    assert actions == ["recover", "sleep", "recover"]
-    assert [frame["product"] for frame in first.sent] == ["earnings", "news", "concalls"]
-    assert second.sent == first.sent
-
-
-def test_websocket_envelope_decoder_rejects_non_objects():
-    assert decode_envelope('{"channel":"news","data":{"id":"n1"}}')["channel"] == "news"
-    with pytest.raises(ValueError):
-        decode_envelope("[]")
+    assert actions[:2] == ["recover", "enter"]
+    assert actions[2:5] == [
+        ("subscribe", "earnings", ["RELIANCE"], True),
+        ("subscribe", "news", ["RELIANCE", "TCS"], True),
+        ("subscribe", "concalls", ["RELIANCE"], True),
+    ]
+    assert actions[-1] == "exit"
+    assert handled[0][0] == {"channel": "earnings", "data": {"id": "e1"}}
+    assert handled[0][1].endswith("+00:00")
+    assert [kind for kind, _details in controls] == ["subscribed", "heartbeat", "error"]

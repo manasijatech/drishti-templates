@@ -1,22 +1,53 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import urlparse
 
 from .config import CHANNELS, load_config
 from .monitor import Monitor
-from .rest import RestClient
-from .socket import RawSubscriptionSession, watch_raw_socket
+from .rest import RestClient, create_sdk_client
+from .socket import watch_sdk
 from .store import Store
 
 
 def console_delivery(event: Any) -> None:
     print(json.dumps(event.to_dict(), sort_keys=True))
+
+
+class FixtureSdkClient:
+    """Deterministic SDK-boundary fake used only by the credential-free demo."""
+
+    def __init__(self, fixture: dict[str, Any]) -> None:
+        self.fixture = fixture
+
+    def _response(self, key: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self.fixture[key])
+
+    def get_earnings(self, **_kwargs: Any) -> object:
+        return self._response("earnings")
+
+    def get_news(self, **_kwargs: Any) -> object:
+        return self._response("news")
+
+    def get_concalls(self, **_kwargs: Any) -> object:
+        return self._response("concalls")
+
+    def get_upcoming_earnings(self, **_kwargs: Any) -> object:
+        return self._response("earnings-upcoming")
+
+    def get_upcoming_concalls(self, **_kwargs: Any) -> object:
+        return self._response("concalls-upcoming")
+
+    def get_earnings_attachments(self, **_kwargs: Any) -> object:
+        return {"data": []}
+
+    def get_concalls_transcript(self, **_kwargs: Any) -> object:
+        return {}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,18 +106,15 @@ def main(argv: list[str] | None = None) -> int:
         fixture_path = Path(__file__).parents[2] / "fixtures" / "rest-pages.json"
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
 
-        def fixture_getter(url: str, _headers: dict[str, str]) -> dict[str, Any]:
-            key = urlparse(url).path.removeprefix("/v1/").replace("/", "-")
-            return cast(dict[str, Any], fixture[key])
-
-        rest = RestClient("https://fixture.invalid/v1", "fixture-key", fixture_getter)
+        rest = RestClient(FixtureSdkClient(cast(dict[str, Any], fixture)))
     else:
         api_key = os.environ.get("DRISHTI_API_KEY")
         if not api_key:
             raise SystemExit(f"DRISHTI_API_KEY is required for {args.command}")
-        rest = RestClient(
-            os.environ.get("DRISHTI_BASE_URL", "https://developers.manasija.in/v1"), api_key
+        sdk = create_sdk_client(
+            api_key, os.environ.get("DRISHTI_BASE_URL", "https://developers.manasija.in")
         )
+        rest = RestClient(sdk)
         if args.command == "resolve-source":
             event = (
                 monitor.resolve_earnings_source(rest, args.provider_id)
@@ -100,20 +128,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"calendar={len(items)}")
             return 0
         if args.command == "watch":
-            session = RawSubscriptionSession(config)
 
             def recover() -> None:
                 monitor.recover(rest, datetime.now(UTC))
 
-            watch_raw_socket(
-                os.environ.get("DRISHTI_WS_URL", "wss://developers.manasija.in/v1/ws"),
-                api_key,
-                session,
-                recover,
-                monitor.handle_envelope,
-                lambda frame: store.audit(
-                    "subscription_acknowledged", product=frame.get("product")
-                ),
+            asyncio.run(
+                watch_sdk(
+                    sdk,
+                    config,
+                    recover,
+                    monitor.handle_envelope,
+                    lambda kind, details: store.audit(f"websocket_{kind}", **details),
+                )
             )
             return 0
     accepted = monitor.recover(rest, now)

@@ -1,5 +1,6 @@
 import json
 
+import drishti_monitor.cli as cli
 from drishti_monitor.cli import main
 from drishti_monitor.config import Coverage, MonitorConfig
 from drishti_monitor.monitor import Monitor
@@ -101,3 +102,32 @@ def test_cli_retries_durable_delivery_failure(tmp_path, capsys):
     assert result == 0
     assert "retried=true" in capsys.readouterr().out
     assert list(Store(state_path).failures()) == []
+
+
+def test_cli_watch_runs_the_async_sdk_path(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    state_path = tmp_path / "state"
+    write_config(config_path)
+    sdk = object()
+    observed = []
+
+    async def fake_watch(client, config, recover, handle, on_control):
+        observed.append((client, config.coverage[0].symbol, handle, on_control))
+
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+    monkeypatch.setattr(cli, "watch_sdk", fake_watch)
+
+    assert (
+        main(
+            [
+                "--config",
+                str(config_path),
+                "--state-dir",
+                str(state_path),
+                "watch",
+            ]
+        )
+        == 0
+    )
+    assert observed[0][0:2] == (sdk, "RELIANCE")

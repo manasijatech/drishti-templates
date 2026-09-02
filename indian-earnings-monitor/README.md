@@ -2,17 +2,16 @@
 
 A runnable, source-linked Drishti CLI for an Indian-equities research desk. It refreshes the
 upcoming earnings/concall calendar, recovers earnings/news/concall records over REST, consumes
-three independent WebSocket subscriptions, and routes accepted records into a durable analyst
-review queue.
+three independent WebSocket subscriptions through the official Drishti Python SDK, and routes
+accepted records into a durable analyst review queue.
 
 This is event monitoring only. It does not place broker orders and is not a full tick feed.
 
 ## Architecture and data boundary
 
 ```text
-coverage JSON -> upcoming REST endpoints -> separate calendar records
-              -> list REST recovery      -> queue records + window checkpoints
-raw WebSocket -> ack/control handling     -> queue records
+coverage JSON -> Drishti SDK REST methods -> calendar records / recovery checkpoints
+              -> Drishti SDK WebSocket   -> queue records
                                       \--> failure/retry queue + append-only audit
 ```
 
@@ -40,9 +39,10 @@ python -m pip install -e '.[dev]'
 cp .env.example .env
 ```
 
-Set `DRISHTI_API_KEY` only in the server process environment. REST requests send it in the
-`X-API-Key` header. Never put a real key in JSON, browser code, logs, or git. The examples have
-no credentials.
+The template depends on `drishti-sdk>=1.0.15,<2`. Set `DRISHTI_API_KEY` only in the server
+process environment. The official SDK sends it in the `X-API-Key` header. Never put a real key
+in JSON, browser code, logs, or git. The examples have no credentials. `DRISHTI_BASE_URL` is an
+optional SDK base URL and must not include `/v1`.
 
 ## Deterministic demo
 
@@ -75,10 +75,12 @@ drishti-monitor --config config.example.json --state-dir var calendar
 drishti-monitor --config config.example.json --state-dir var watch
 ```
 
-`watch` sends one subscription each for `earnings`, `news`, and `concalls`. A documented
-`status: subscribed` acknowledgement is audited as control data, not processed as a market
-event. After disconnect, the same production loop performs REST recovery before opening the
-next socket and replaying subscriptions.
+`watch` performs REST recovery, opens the official SDK's async managed WebSocket session, and
+subscribes separately to enabled `earnings`, `news`, and `concalls` coverage with
+`detailed=True`. Only SDK events with `kind="data"` become research records. Subscription,
+heartbeat, error, and other control events are audited. The SDK owns authentication,
+reconnection, subscription replay, and close lifecycle; this template does not send raw frames
+or implement a second reconnect loop.
 
 REST recovery chunks coverage into at most 20 symbols per request, paginates with a maximum
 configured limit of 50, and uses inclusive `from`/`to` windows. A channel checkpoint advances
@@ -135,8 +137,9 @@ metadata, not implicit third-party calls. Replace the adapter with a server-side
 - `GET /v1/earnings/attachments`, `GET /v1/concalls/transcript`
 - `wss://developers.manasija.in/v1/ws`
 
-The implementation follows the checked OpenAPI `data`/`has_next`, `page`/`limit`, and artifact
-response shapes. It does not invent cursors or provider fields.
+All endpoints above are called through the official Python SDK's product-specific methods. The
+adapter follows `data`/`has_next`, `page`/`limit`, and artifact response shapes and does not
+invent cursors or provider fields.
 
 ## Validation
 
@@ -148,10 +151,11 @@ pytest
 python -m build
 ```
 
-Tests cover configuration, 20-symbol chunks, pagination, calendars, empty results, late
+Tests use SDK-boundary fakes and cover configuration, 20-symbol chunks, pagination, calendars, empty results, late
 transcripts, artifacts/audio, amendments and related versions, durable failures/retry,
-notes/review, crash-safe checkpoints, acknowledgements, reconnect/resubscription, deduplication,
-source output, and audit history.
+notes/review, crash-safe checkpoints, managed WebSocket control/data separation and independent
+subscriptions, deduplication, source output, and audit history. The deterministic demo also uses
+an SDK-boundary fake and needs neither a key nor network access.
 
 ## Authoritative contracts
 
@@ -164,6 +168,8 @@ Consulted 2026-09-02:
 - [News list](https://drishti.manasija.in/docs/api-reference/news/list-news-feed-items)
 - [Conference-call list](https://drishti.manasija.in/docs/api-reference/conference-calls/list-conference-calls)
 - [WebSocket streams](https://drishti.manasija.in/docs/guides/websockets)
+- [Python SDK](https://drishti.manasija.in/docs/sdks/python)
+- [Quickstart](https://drishti.manasija.in/docs/quickstart)
 - [OpenAPI contract](https://developers.manasija.in/openapi.json)
 
 ## Known limitations
@@ -172,3 +178,5 @@ There is no calendar-owner mutation command, fuzzy/semantic relation inference, 
 delivery adapter, AI summarization, broker execution, or tick feed. Artifact URLs may expire;
 resolve them again on demand. Ambiguous calendar matches are intentionally left unlinked. JSON
 state is suitable for this focused single-process template, not concurrent multi-process writers.
+REST recovery runs before a watch session starts; reconnection during that session is managed by
+the SDK and does not trigger an application-level REST recovery on every reconnect.

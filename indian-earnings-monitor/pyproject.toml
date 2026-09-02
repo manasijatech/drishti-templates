@@ -9,7 +9,7 @@ description = "Source-linked Indian earnings, news, and concall review queue"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["websocket-client>=1.8,<2"]
+dependencies = ["drishti-sdk>=1.0.15,<2"]
 
 [project.optional-dependencies]
 dev = ["build>=1.2,<2", "mypy>=1.17,<2", "pytest>=8.4,<9", "ruff>=0.12,<1"]
@@ -35,3 +35,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.11"
 strict = true
 packages = ["drishti_monitor"]
+
+[[tool.mypy.overrides]]
+module = ["drishti_sdk", "drishti_sdk.*"]
+ignore_missing_imports = true
