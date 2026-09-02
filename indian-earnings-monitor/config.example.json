@@ -1,0 +1,25 @@
+{
+  "coverage": [
+    {
+      "symbol": "RELIANCE",
+      "exchange": "NSE",
+      "owner": "energy-desk",
+      "priority": "high",
+      "channels": ["earnings", "news", "concalls"],
+      "delivery": ["research-queue", "console"],
+      "reviewSlaMinutes": 30
+    },
+    {
+      "symbol": "TCS",
+      "exchange": "NSE",
+      "owner": "technology-desk",
+      "priority": "normal",
+      "channels": ["earnings", "news", "concalls"],
+      "delivery": ["research-queue"],
+      "reviewSlaMinutes": 120
+    }
+  ],
+  "recoveryLookbackHours": 24,
+  "pageLimit": 50,
+  "maxDeliveryAttempts": 3
+}

@@ -1,0 +1,22 @@
+{
+  "earnings": {
+    "data": [{"id":"earn-1","symbol":"RELIANCE","company_name":"Reliance Industries Ltd","quarter":"q1_27","date":"2026-09-02T09:00:00+00:00","summary":"Quarterly results filed"}],
+    "has_next": false
+  },
+  "news": {
+    "data": [{"id":"news-1","title":"Reliance files quarterly results","summary":"Results were published.","company":"Reliance Industries","symbol":"RELIANCE","source":"Example News","link":"https://example.com/news/reliance-results","date":"2026-09-02T09:05:00+00:00"}],
+    "has_next": false
+  },
+  "concalls": {
+    "data": [{"id":"call-1","symbol":"RELIANCE","quarter":"q1_27","date":"2026-09-02T09:30:00+00:00","transcript_url":"https://example.com/concalls/reliance-q1-27.pdf"}],
+    "has_next": false
+  },
+  "earnings-upcoming": {
+    "data": [{"id":"upcoming-earn-1","event_id":"calendar-event-1","symbol":"RELIANCE","company":"Reliance Industries Ltd","quarter":"q1_27","date":"2026-09-10T00:00:00+00:00","purpose":"Financial Results"}],
+    "has_next": false
+  },
+  "concalls-upcoming": {
+    "data": [{"id":"upcoming-call-1","symbol":"RELIANCE","quarter":"q1_27","meeting_date":"2026-09-11T16:00:00Z"}],
+    "has_next": false
+  }
+}
