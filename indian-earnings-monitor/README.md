@@ -1,179 +1,201 @@
-# Indian Earnings, News, and Concall Monitor
+# Drishti Indian Earnings Monitor
 
-A small command-line tool that watches earnings, news, and concalls for the Indian companies in
-`config.example.json`. It collects matching updates in a local review queue. It does not trade,
-publish, or message anyone.
+Watch earnings, news, and conference calls for a list of Indian companies.
 
-## Try it in two minutes
+The monitor saves matching updates in a local queue. It does not place trades, publish content,
+or send messages.
 
-Install it:
+## Quick start
+
+Run these commands from the `indian-earnings-monitor` folder.
+
+### 1. Install the monitor
 
 ```bash
-python -m venv .venv
-. .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install -e .
 ```
 
-Try the safe sample first. It needs no key and makes no network calls:
+Activate the environment again when you open a new terminal:
 
 ```bash
-drishti-monitor demo
+source .venv/bin/activate
 ```
 
-For live data, set your key and choose one command:
+### 2. Choose the companies to watch
+
+Open `config.example.json`:
 
 ```bash
-export DRISHTI_API_KEY='...'
-
-drishti-monitor check  # fetch new updates once, then exit
-drishti-monitor run    # keep watching; press Ctrl+C to stop
+nano config.example.json
 ```
 
-`run` checks the account's WebSocket entitlement before connecting. Sandbox keys can still use
-`check`, but live WebSocket monitoring requires Starter or higher. When access is missing, the
-CLI links directly to [Purchase the Starter plan](https://platform.manasija.in/developer-portal/plans).
+The included file watches `RELIANCE` and `TCS`. Change the symbols or add more entries under
+`coverage`. This is the smallest working example:
 
-See what was collected:
+```json
+{
+  "coverage": [
+    {
+      "symbol": "RELIANCE",
+      "exchange": "NSE",
+      "owner": "energy-desk",
+      "priority": "high",
+      "channels": ["earnings", "news", "concalls"]
+    }
+  ]
+}
+```
+
+- `symbol`: NSE or BSE trading symbol.
+- `owner`: your internal label for the person or team reviewing updates.
+- `priority`: `normal` or `high`.
+- `channels`: choose `earnings`, `news`, and/or `concalls`.
+
+### 3. Add your API key
+
+Set the key in the current terminal:
 
 ```bash
-drishti-monitor queue
-drishti-monitor calendar
+export DRISHTI_API_KEY='YOUR_API_KEY'
 ```
 
-That is enough for normal use. The tool automatically stores its checkpoints and queue in
-`var/`, so you do not need to pass or manage a state directory. Edit `config.example.json` to
-change the companies, owners, and products being monitored.
+Do not put the key in `config.example.json` or commit it to Git.
 
-## Architecture and data boundary
+### 4. Fetch updates once
+
+```bash
+drishti-monitor check
+```
+
+Example output:
 
 ```text
-coverage JSON -> Drishti SDK REST methods -> calendar records / recovery checkpoints
-              -> Drishti SDK WebSocket   -> queue records
-                                      \--> failure/retry queue + append-only audit
+accepted=2 calendar=1 queue=7
 ```
 
-`var/state.json` contains checkpoints, calendar records, review events, amendment links, and
-active/resolved failures. `var/audit.jsonl` is append-only. Calendar entries never become
-delivered `ResearchEvent` records implicitly. Provider source content is separate from the
-unused `generated_summary` field; this version performs no AI generation.
+- `accepted=2`: two new updates were found during this check.
+- `calendar=1`: one upcoming earnings or concall date was saved.
+- `queue=7`: seven updates are now stored in total.
 
-Coverage owners, priorities, delivery names, and SLAs are local operator policy. Drishti's
-upcoming APIs do not assign analysts, so each calendar record deterministically inherits its
-owner from coverage configuration; changing ownership is an explicit configuration workflow.
-Every refresh preserves `schedule_history` and reports `schedule_status` as `scheduled`,
-`changed`, or `unconfirmed`. Calendar records also show related delivered identities and
-whether the expected filing/call plus filing artifact, transcript, and audio have arrived.
-Upcoming requests include only symbols whose coverage enables that product.
+`accepted=0` is not an error. It means there were no new updates since the last check.
 
-## Setup and authentication details
-
-Python 3.11 or newer is required:
-
-Install `.[dev]` instead of `.` only when you also want the test and lint tools. `.env.example`
-documents the available environment variables, but the CLI does not automatically load `.env`.
-
-The template depends on `drishti-sdk>=1.0.15,<2`. Set `DRISHTI_API_KEY` only in the server
-process environment. The official SDK sends it in the `X-API-Key` header. Never put a real key
-in JSON, browser code, logs, or git. The examples have no credentials. `DRISHTI_BASE_URL` is an
-optional SDK base URL and must not include `/v1`.
-
-## Deterministic demo
+### 5. Monitor live updates
 
 ```bash
-drishti-monitor demo
+drishti-monitor run
+```
+
+Leave this command running. New matching events will appear in the terminal and be added to the
+queue. Press `Ctrl+C` to stop.
+
+Live WebSocket monitoring requires the Starter plan or higher. Sandbox keys can still use
+`check`. If your key has no WebSocket access, the monitor will show this link:
+
+[Purchase the Starter plan](https://platform.manasija.in/developer-portal/plans)
+
+### 6. View saved results
+
+Show every saved update:
+
+```bash
 drishti-monitor queue
+```
+
+Show upcoming earnings and concall dates:
+
+```bash
 drishti-monitor calendar
 ```
 
-`demo` needs no key or network. It runs event recovery and both upcoming-calendar refreshes
-against deterministic fixtures. Keeping its state directory demonstrates deduplication; use a
-new temporary directory for a fresh run.
+## Commands
 
-## Advanced commands
+| Command | What it does |
+| --- | --- |
+| `drishti-monitor demo` | Runs a safe sample without an API key or network call. |
+| `drishti-monitor check` | Fetches new updates once and exits. |
+| `drishti-monitor run` | Watches for live updates until you stop it. |
+| `drishti-monitor queue` | Shows all saved updates. |
+| `drishti-monitor calendar` | Shows saved earnings and concall dates. |
 
-These calls can consume Drishti credits; WebSockets require an entitled paid plan.
+## Where the data is saved
+
+The monitor creates a `var` folder automatically:
+
+- `var/state.json` stores the queue, calendar, and checkpoints.
+- `var/audit.jsonl` stores a history of actions and errors.
+
+Checkpoints prevent the same update from being added again after a restart. Keep the `var` folder
+if you want the monitor to remember its progress.
+
+To use another folder:
 
 ```bash
-export DRISHTI_API_KEY='...'
-
-# These older operator names remain supported for compatibility.
-drishti-monitor live-smoke
-drishti-monitor calendar-refresh
-drishti-monitor watch
-
-# Override defaults only when you need separate coverage or storage.
-drishti-monitor --config my-coverage.json --state-dir my-state check
+drishti-monitor --state-dir my-state check
 ```
 
-`run` (or its older name, `watch`) performs REST recovery, opens the official SDK's async managed WebSocket session, and
-subscribes separately to enabled `earnings`, `news`, and `concalls` coverage with
-`detailed=True`. Only SDK events with `kind="data"` become research records. Subscription,
-heartbeat, error, and other control events are audited. The SDK owns authentication,
-reconnection, subscription replay, and close lifecycle; this template does not send raw frames
-or implement a second reconnect loop.
+## Use another configuration file
 
-REST recovery chunks coverage into at most 20 symbols per request, paginates with a maximum
-configured limit of 50, and uses inclusive `from`/`to` windows. A channel checkpoint advances
-to the completed window end only after every symbol chunk/page has produced a durable outcome.
-A failed page leaves that channel's prior checkpoint unchanged, making restart gap-safe.
-
-## Review, source, and failure operations
+The default file is `config.example.json`. To use a different file:
 
 ```bash
-drishti-monitor --config config.example.json --state-dir var queue
-drishti-monitor --config config.example.json --state-dir var add-note earnings RECORD_ID 'Checked PDF'
-drishti-monitor --config config.example.json --state-dir var mark-reviewed earnings RECORD_ID
-drishti-monitor --config config.example.json --state-dir var failures
-drishti-monitor --config config.example.json --state-dir var retry-failure FAILURE_ID
-
-# Resolve billed source artifacts only when an analyst needs them.
-drishti-monitor --config config.example.json --state-dir var resolve-source earnings RECORD_ID
-drishti-monitor --config config.example.json --state-dir var resolve-source concalls RECORD_ID
+drishti-monitor --config my-companies.json check
+drishti-monitor --config my-companies.json run
 ```
 
-Parsing failures and exhausted delivery attempts remain visible and retryable until resolved;
-resolution is audited rather than deleting history. Amendments preserve both records and expose
-`amendment_of`, `related_identities`, and `amendment_changes` in queue output. The latter maps
-changed source/research field names to `{before, after}` values and deliberately excludes local
-workflow state such as assignment, review, delivery, notes, routing, and relationships.
+Options such as `--config`, `--state-dir`, and `--json` must come before the command.
 
-Every queued event has an internal `routing_reason` naming the matched symbol/product coverage
-and assigned owner. When a provider row has no company name, the display value is
-`<SYMBOL> (company name unavailable)` rather than a null label; this is display metadata, not a
-provider-supplied company field.
+## Common problems
 
-Cross-product relations are deliberately deterministic and bidirectional. Earnings and concalls
-relate only when both have the same symbol and verified quarter. Quarterless news relates to an
-earnings or concall record only when the symbol and provider source-date (`YYYY-MM-DD`) match;
-the monitor never invents a quarter. This conservative news rule can omit stories published on a
-different date even when an analyst would consider them related. Calendar reconciliation uses a
-unique product+symbol+quarter match (or a unique product+symbol candidate when the event has no
-quarter); ambiguous schedules remain unlinked for operator review.
+### “Live monitoring needs a Drishti API key”
 
-News sources use the verified `link` field. Earnings PDFs are resolved on demand with
-`GET /v1/earnings/attachments`, whose result is `data[{id,status,url,...}]`. Concall artifacts
-are resolved with `GET /v1/concalls/transcript?symbol=...&quarter=...`, returning verified
-`transcript_url` and `audio_url`. When the provider reports no artifact, source fields remain
-`null`; the provider ID remains available for later retry. Undocumented `recording_url` and
-earnings `attachment_url` payload assumptions are not used.
-
-The built-in delivery adapter writes JSON to stdout. Delivery names in configuration are policy
-metadata, not implicit third-party calls. Replace the adapter with a server-side integration.
-
-## Verified endpoint coverage
-
-- `GET /v1/earnings`, `GET /v1/news`, `GET /v1/concalls`
-- `GET /v1/earnings/upcoming`, `GET /v1/concalls/upcoming`
-- `GET /v1/earnings/attachments`, `GET /v1/concalls/transcript`
-- `wss://developers.manasija.in/v1/ws`
-
-All endpoints above are called through the official Python SDK's product-specific methods. The
-adapter follows `data`/`has_next`, `page`/`limit`, and artifact response shapes and does not
-invent cursors or provider fields.
-
-## Validation
+Set the key again in the current terminal:
 
 ```bash
+export DRISHTI_API_KEY='YOUR_API_KEY'
+```
+
+### “Wait one minute, then try again”
+
+The API key reached its per-minute request limit. Wait one minute before running `check` again.
+The monitor reuses a recent successful check when you start `run`, so it avoids duplicate calls.
+
+### The live monitor shows no updates
+
+This can be normal. The connection stays open and waits for a matching earnings, news, or concall
+event. Quiet periods produce no output.
+
+### The key has no WebSocket access
+
+Use `drishti-monitor check` for REST polling, or
+[purchase the Starter plan](https://platform.manasija.in/developer-portal/plans) for live streams.
+
+## What happens behind the scenes
+
+1. `check` asks Drishti for recent earnings, news, concalls, and upcoming dates.
+2. The monitor keeps only the symbols and channels in your configuration.
+3. New records are added to the local queue and assigned to the configured owner.
+4. `run` uses the Drishti Python SDK to receive new events over WebSocket.
+5. The SDK handles authentication, reconnects, and subscription replay.
+
+The monitor uses the official `drishti-sdk` package. REST checks can consume Drishti credits.
+WebSocket streams require a paid plan but do not consume REST credits.
+
+## Limits
+
+- This is a single-process local template, not a hosted service.
+- It does not place broker orders.
+- It does not send Slack, email, or other notifications by itself.
+- It does not create AI summaries.
+- The local JSON store is not designed for several processes writing at the same time.
+
+## Developer checks
+
+Install the development tools and run the test suite:
+
+```bash
+python -m pip install -e '.[dev]'
 ruff format --check .
 ruff check .
 mypy --strict
@@ -181,32 +203,9 @@ pytest
 python -m build
 ```
 
-Tests use SDK-boundary fakes and cover configuration, 20-symbol chunks, pagination, calendars, empty results, late
-transcripts, artifacts/audio, amendments and related versions, durable failures/retry,
-notes/review, crash-safe checkpoints, managed WebSocket control/data separation and independent
-subscriptions, deduplication, source output, and audit history. The deterministic demo also uses
-an SDK-boundary fake and needs neither a key nor network access.
+## Drishti documentation
 
-## Authoritative contracts
-
-Consulted 2026-09-02:
-
-- [Drishti overview and base URLs](https://drishti.manasija.in/docs)
-- [Authentication](https://drishti.manasija.in/docs/guides/authentication)
-- [Pagination and filtering](https://drishti.manasija.in/docs/guides/pagination-filtering)
-- [Earnings list](https://drishti.manasija.in/docs/api-reference/earnings/list-earnings-filings)
-- [News list](https://drishti.manasija.in/docs/api-reference/news/list-news-feed-items)
-- [Conference-call list](https://drishti.manasija.in/docs/api-reference/conference-calls/list-conference-calls)
-- [WebSocket streams](https://drishti.manasija.in/docs/guides/websockets)
 - [Python SDK](https://drishti.manasija.in/docs/sdks/python)
-- [Quickstart](https://drishti.manasija.in/docs/quickstart)
-- [OpenAPI contract](https://developers.manasija.in/openapi.json)
-
-## Known limitations
-
-There is no calendar-owner mutation command, fuzzy/semantic relation inference, third-party
-delivery adapter, AI summarization, broker execution, or tick feed. Artifact URLs may expire;
-resolve them again on demand. Ambiguous calendar matches are intentionally left unlinked. JSON
-state is suitable for this focused single-process template, not concurrent multi-process writers.
-REST recovery runs before a watch session starts; reconnection during that session is managed by
-the SDK and does not trigger an application-level REST recovery on every reconnect.
+- [Authentication](https://drishti.manasija.in/docs/guides/authentication)
+- [WebSocket streams](https://drishti.manasija.in/docs/guides/websockets)
+- [Plans](https://platform.manasija.in/developer-portal/plans)
