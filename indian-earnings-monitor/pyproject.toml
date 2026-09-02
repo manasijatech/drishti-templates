@@ -12,7 +12,7 @@ license = { text = "MIT" }
 dependencies = ["websocket-client>=1.8,<2"]
 
 [project.optional-dependencies]
-dev = ["mypy>=1.17,<2", "pytest>=8.4,<9", "ruff>=0.12,<1"]
+dev = ["build>=1.2,<2", "mypy>=1.17,<2", "pytest>=8.4,<9", "ruff>=0.12,<1"]
 
 [project.scripts]
 drishti-monitor = "drishti_monitor.cli:main"
