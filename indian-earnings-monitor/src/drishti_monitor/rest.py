@@ -34,22 +34,59 @@ class RestClient:
         to_time: str,
         limit: int,
     ) -> Iterator[list[dict[str, Any]]]:
-        page = 1
-        while True:
+        for offset in range(0, len(symbols), 20):
             query: dict[str, str | int] = {
-                "symbols": ",".join(symbols),
+                "symbols": ",".join(symbols[offset : offset + 20]),
                 "from": from_time,
                 "to": to_time,
-                "page": page,
                 "limit": limit,
             }
             if channel in ("earnings", "concalls"):
                 query["detailed"] = "true"
-            response = self.getter(f"{self.base_url}/{channel}?{urlencode(query)}", self.headers)
+            yield from self._paginated(channel, query)
+
+    def upcoming(
+        self, product: str, symbols: list[str], limit: int
+    ) -> Iterator[list[dict[str, Any]]]:
+        if product not in ("earnings", "concalls"):
+            raise ValueError("upcoming product must be earnings or concalls")
+        for offset in range(0, len(symbols), 20):
+            query: dict[str, str | int] = {
+                "symbols": ",".join(symbols[offset : offset + 20]),
+                "limit": limit,
+            }
+            yield from self._paginated(f"{product}/upcoming", query)
+
+    def _paginated(self, path: str, query: dict[str, str | int]) -> Iterator[list[dict[str, Any]]]:
+        page = 1
+        while True:
+            response = self.getter(
+                f"{self.base_url}/{path}?{urlencode({**query, 'page': page})}", self.headers
+            )
             data = response.get("data")
             if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
                 raise ValueError("Drishti response data must be a list of objects")
             yield data
             if response.get("has_next") is not True:
-                break
+                return
             page += 1
+
+    def earnings_attachments(self, ids: list[str]) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for offset in range(0, len(ids), 20):
+            query = urlencode({"ids": ",".join(ids[offset : offset + 20])})
+            response = self.getter(f"{self.base_url}/earnings/attachments?{query}", self.headers)
+            data = response.get("data")
+            if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+                raise ValueError("earnings attachment response data must be a list of objects")
+            results.extend(data)
+        return results
+
+    def concall_artifacts(self, symbol: str, quarter: str) -> dict[str, Any]:
+        query = urlencode({"symbol": symbol, "quarter": quarter})
+        response = self.getter(
+            f"{self.base_url}/concalls/transcript?{query}",
+            self.headers,
+        )
+        allowed = {key: response.get(key) for key in ("transcript_url", "audio_url", "expires_in")}
+        return {key: value for key, value in allowed.items() if value is not None}

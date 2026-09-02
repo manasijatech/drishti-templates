@@ -54,8 +54,8 @@ def load_config(path: str | Path) -> MonitorConfig:
             )
         )
     page_limit = int(raw.get("pageLimit", 20))
-    if not 1 <= page_limit <= 100:
-        raise ValueError("pageLimit must be between 1 and 100")
+    if not 1 <= page_limit <= 50:
+        raise ValueError("pageLimit must be between 1 and 50")
     return MonitorConfig(
         tuple(coverage),
         int(raw.get("recoveryLookbackHours", 24)),

@@ -1,30 +1,33 @@
 # Indian Earnings, News, and Concall Monitor
 
-A runnable, source-linked Drishti CLI template for an Indian-equities research desk. It
-recovers missed earnings, news, and conference-call records over REST, consumes each live
-product as a separate WebSocket subscription, and routes accepted records into a persistent
-analyst review queue.
+A runnable, source-linked Drishti CLI for an Indian-equities research desk. It refreshes the
+upcoming earnings/concall calendar, recovers earnings/news/concall records over REST, consumes
+three independent WebSocket subscriptions, and routes accepted records into a durable analyst
+review queue.
 
-This template monitors research events only. It cannot place broker orders and it is not a
-full tick-level market-data feed. Use a broker API for execution and a licensed market-data
-feed for ticks.
+This is event monitoring only. It does not place broker orders and is not a full tick feed.
 
-## Architecture
+## Architecture and data boundary
 
 ```text
-coverage JSON -> REST recovery (one checkpoint/product) -> normalize + deduplicate
-                                                        -> deterministic owner/SLA
-raw WebSocket -> separate earnings/news/concalls frames -> review queue + delivery retry
-                                                        -> append-only audit JSONL
+coverage JSON -> upcoming REST endpoints -> separate calendar records
+              -> list REST recovery      -> queue records + window checkpoints
+raw WebSocket -> ack/control handling     -> queue records
+                                      \--> failure/retry queue + append-only audit
 ```
 
-State lives under `var/` by default: `state.json` is the queue/checkpoint read model and
-`audit.jsonl` is the append-only activity trail. Provider source content and the optional
-`generated_summary` field are separate. Version 0.1 does not generate summaries.
+`var/state.json` contains checkpoints, calendar records, review events, amendment links, and
+active/resolved failures. `var/audit.jsonl` is append-only. Calendar entries never become
+delivered `ResearchEvent` records implicitly. Provider source content is separate from the
+unused `generated_summary` field; this version performs no AI generation.
 
-## Safe setup
+Coverage owners, priorities, delivery names, and SLAs are local operator policy. Drishti's
+upcoming APIs do not assign analysts, so assigning or changing calendar ownership remains an
+explicit operator workflow outside the provider record.
 
-Python 3.11 or newer is required. From this directory:
+## Safe setup and authentication
+
+Python 3.11 or newer is required:
 
 ```bash
 python -m venv .venv
@@ -33,76 +36,107 @@ python -m pip install -e '.[dev]'
 cp .env.example .env
 ```
 
-Do not put a real key in configuration or client-side code. Export it only in the server
-process environment (`set -a; . ./.env; set +a` is one local option). The checked-in coverage
-example uses public symbols and placeholder destinations, and contains no credentials.
+Set `DRISHTI_API_KEY` only in the server process environment. REST requests send it in the
+`X-API-Key` header. Never put a real key in JSON, browser code, logs, or git. The examples have
+no credentials.
 
 ## Deterministic demo
 
 ```bash
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-monitor-demo demo
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-monitor-demo queue
+drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo demo
+drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo queue
+drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo calendar
+drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo failures
 ```
 
-The demo performs the complete REST-to-queue workflow using deterministic fixtures and needs
-no network or API key. Remove the demo state directory before rerunning if you want to see the
-same records accepted again; keeping it demonstrates deduplication.
+`demo` needs no key or network. It runs event recovery and both upcoming-calendar refreshes
+against deterministic fixtures. Keeping its state directory demonstrates deduplication; use a
+new temporary directory for a fresh run.
 
-## Optional live smoke and service
+## Live commands
 
-An API key with the relevant product access is required. WebSockets require a paid Drishti
-plan. These commands make billable API calls; list detail mode costs more than summary mode.
+These calls can consume Drishti credits; WebSockets require an entitled paid plan.
 
 ```bash
 export DRISHTI_API_KEY='...'
+
+# Recover all three event products and refresh both calendars once, then exit.
 drishti-monitor --config config.example.json --state-dir var live-smoke
+
+# Refresh or list schedule records separately.
+drishti-monitor --config config.example.json --state-dir var calendar-refresh
+drishti-monitor --config config.example.json --state-dir var calendar
+
+# Recover, connect, acknowledge subscriptions, and continue through reconnects.
 drishti-monitor --config config.example.json --state-dir var watch
 ```
 
-`live-smoke` performs one bounded recovery and exits. `watch` performs bounded recovery, opens
-the raw socket, sends independent `earnings`, `news`, and `concalls` subscribe frames, and
-processes envelopes until interrupted. After any disconnect it recovers from each saved REST
-checkpoint before reconnecting and replaying all subscriptions. Inclusive time bounds can
-redeliver the checkpoint record; provider-ID deduplication makes that safe.
+`watch` sends one subscription each for `earnings`, `news`, and `concalls`. A documented
+`status: subscribed` acknowledgement is audited as control data, not processed as a market
+event. After disconnect, the same production loop performs REST recovery before opening the
+next socket and replaying subscriptions.
 
-The built-in delivery adapter prints JSON to stdout. Replace `console_delivery` with a
-server-side queue, Slack, or email adapter; the retry boundary updates visible delivery state
-and appends failures to the audit trail. Delivery destinations in the coverage file are policy
-metadata and are never called implicitly.
+REST recovery chunks coverage into at most 20 symbols per request, paginates with a maximum
+configured limit of 50, and uses inclusive `from`/`to` windows. A channel checkpoint advances
+to the completed window end only after every symbol chunk/page has produced a durable outcome.
+A failed page leaves that channel's prior checkpoint unchanged, making restart gap-safe.
 
-## Review workflow and records
+## Review, source, and failure operations
 
-Every accepted event preserves provider ID, channel, symbol/company, provider source time,
-local received time, source URL when supplied, review state, owner, priority, and deadline.
-Notes and review transitions use `Monitor.add_note` and `Monitor.mark_reviewed`. The business
-key `(channel, symbol, quarter, source date)` identifies a new provider ID as an amendment
-when a quarter is supplied; both versions remain in the queue and the amendment is raised to
-high priority. News without a quarter is deduplicated only by provider ID so distinct same-day
-stories are never mislabeled as amendments.
+```bash
+drishti-monitor --config config.example.json --state-dir var queue
+drishti-monitor --config config.example.json --state-dir var add-note earnings RECORD_ID 'Checked PDF'
+drishti-monitor --config config.example.json --state-dir var mark-reviewed earnings RECORD_ID
+drishti-monitor --config config.example.json --state-dir var failures
+drishti-monitor --config config.example.json --state-dir var retry-failure FAILURE_ID
 
-List endpoints do not always supply source URLs. Earnings attachment URLs should be resolved
-on demand through `/v1/earnings/attachments`; concall artifacts can arrive later and should be
-accepted as later records. This first version deliberately does not prefetch billed attachments,
-correlate records across different products, deliver to third-party services, or call AI.
+# Resolve billed source artifacts only when an analyst needs them.
+drishti-monitor --config config.example.json --state-dir var resolve-source earnings RECORD_ID
+drishti-monitor --config config.example.json --state-dir var resolve-source concalls RECORD_ID
+```
+
+Parsing failures and exhausted delivery attempts remain visible and retryable until resolved;
+resolution is audited rather than deleting history. Amendments preserve both records and expose
+`amendment_of` plus `related_identities` in queue output.
+
+News sources use the verified `link` field. Earnings PDFs are resolved on demand with
+`GET /v1/earnings/attachments`, whose result is `data[{id,status,url,...}]`. Concall artifacts
+are resolved with `GET /v1/concalls/transcript?symbol=...&quarter=...`, returning verified
+`transcript_url` and `audio_url`. When the provider reports no artifact, source fields remain
+`null`; the provider ID remains available for later retry. Undocumented `recording_url` and
+earnings `attachment_url` payload assumptions are not used.
+
+The built-in delivery adapter writes JSON to stdout. Delivery names in configuration are policy
+metadata, not implicit third-party calls. Replace the adapter with a server-side integration.
+
+## Verified endpoint coverage
+
+- `GET /v1/earnings`, `GET /v1/news`, `GET /v1/concalls`
+- `GET /v1/earnings/upcoming`, `GET /v1/concalls/upcoming`
+- `GET /v1/earnings/attachments`, `GET /v1/concalls/transcript`
+- `wss://developers.manasija.in/v1/ws`
+
+The implementation follows the checked OpenAPI `data`/`has_next`, `page`/`limit`, and artifact
+response shapes. It does not invent cursors or provider fields.
 
 ## Validation
 
 ```bash
 ruff format --check .
 ruff check .
-mypy
+mypy --strict
 pytest
 python -m build
 ```
 
-Tests cover configuration, pagination, headers and query construction, empty responses,
-checkpoints, all three product shapes, source preservation, late transcripts, amendments,
-delivery failure/retry, analyst notes/review, socket envelopes, independent subscription state,
-REST-before-resubscribe ordering, deduplication, and audit output.
+Tests cover configuration, 20-symbol chunks, pagination, calendars, empty results, late
+transcripts, artifacts/audio, amendments and related versions, durable failures/retry,
+notes/review, crash-safe checkpoints, acknowledgements, reconnect/resubscription, deduplication,
+source output, and audit history.
 
-## Authoritative Drishti contracts
+## Authoritative contracts
 
-Consulted on 2026-09-02:
+Consulted 2026-09-02:
 
 - [Drishti overview and base URLs](https://drishti.manasija.in/docs)
 - [Authentication](https://drishti.manasija.in/docs/guides/authentication)
@@ -110,8 +144,12 @@ Consulted on 2026-09-02:
 - [Earnings list](https://drishti.manasija.in/docs/api-reference/earnings/list-earnings-filings)
 - [News list](https://drishti.manasija.in/docs/api-reference/news/list-news-feed-items)
 - [Conference-call list](https://drishti.manasija.in/docs/api-reference/conference-calls/list-conference-calls)
-- [WebSocket streams and envelopes](https://drishti.manasija.in/docs/guides/websockets)
-- [Executable OpenAPI contract](https://developers.manasija.in/openapi.json)
+- [WebSocket streams](https://drishti.manasija.in/docs/guides/websockets)
+- [OpenAPI contract](https://developers.manasija.in/openapi.json)
 
-The implementation uses the documented `data` plus `has_next` response and `page`/`limit`
-pagination. It does not infer undocumented cursors or provider fields.
+## Known limitations
+
+There is no calendar-owner mutation command, cross-product semantic correlation, third-party
+delivery adapter, AI summarization, broker execution, or tick feed. Artifact URLs may expire;
+resolve them again on demand. JSON state is suitable for this focused single-process template,
+not concurrent multi-process writers.

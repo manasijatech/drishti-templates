@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -20,10 +21,18 @@ class Store:
 
     def _read_state(self) -> dict[str, Any]:
         if not self.state_path.exists():
-            return {"checkpoints": {}, "events": {}, "business_keys": {}}
+            return {
+                "checkpoints": {},
+                "events": {},
+                "business_keys": {},
+                "calendar": {},
+                "failures": {},
+            }
         value = json.loads(self.state_path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             raise ValueError("state file must contain an object")
+        value.setdefault("calendar", {})
+        value.setdefault("failures", {})
         return value
 
     def _save(self) -> None:
@@ -62,7 +71,13 @@ class Store:
         status = "amendment" if prior else "accepted"
         if isinstance(prior, str):
             event.amendment_of = prior
+            event.related_identities.append(prior)
             event.priority = "high"
+            prior_event = self._state["events"].get(prior)
+            if isinstance(prior_event, dict):
+                related = prior_event.setdefault("related_identities", [])
+                if identity not in related:
+                    related.append(identity)
         self._state["events"][identity] = event.to_dict()
         if business_key:
             self._state["business_keys"][business_key] = identity
@@ -78,3 +93,65 @@ class Store:
 
     def events(self) -> Iterator[dict[str, Any]]:
         yield from self._state["events"].values()
+
+    def event(self, channel: Channel, provider_id: str) -> ResearchEvent:
+        identity = f"{channel}:{provider_id}"
+        raw = self._state["events"].get(identity)
+        if not isinstance(raw, dict):
+            raise KeyError(identity)
+        return ResearchEvent(**raw)
+
+    def record_failure(
+        self,
+        kind: str,
+        error: str,
+        *,
+        channel: Channel | None = None,
+        payload: dict[str, Any] | None = None,
+        received_time: str | None = None,
+        event_identity: str | None = None,
+    ) -> str:
+        material = event_identity or json.dumps(payload, sort_keys=True)
+        digest = hashlib.sha256(f"{kind}:{channel}:{material}".encode()).hexdigest()[:16]
+        failure_id = f"{kind}-{digest}"
+        previous = self._state["failures"].get(failure_id, {})
+        self._state["failures"][failure_id] = {
+            "failure_id": failure_id,
+            "kind": kind,
+            "status": "active",
+            "error": error,
+            "channel": channel,
+            "payload": payload,
+            "received_time": received_time,
+            "event_identity": event_identity,
+            "attempts": int(previous.get("attempts", 0)) + 1,
+        }
+        self._save()
+        self.audit("failure_recorded", failure_id=failure_id, kind=kind, error=error)
+        return failure_id
+
+    def failures(self) -> Iterator[dict[str, Any]]:
+        yield from (
+            failure for failure in self._state["failures"].values() if failure["status"] == "active"
+        )
+
+    def failure(self, failure_id: str) -> dict[str, Any]:
+        failure = self._state["failures"].get(failure_id)
+        if not isinstance(failure, dict) or failure.get("status") != "active":
+            raise KeyError(failure_id)
+        return failure
+
+    def resolve_failure(self, failure_id: str) -> None:
+        failure = self.failure(failure_id)
+        failure["status"] = "resolved"
+        self._save()
+        self.audit("failure_resolved", failure_id=failure_id)
+
+    def save_calendar(self, product: str, item: dict[str, Any]) -> None:
+        identity = f"{product}:{item['provider_id']}"
+        self._state["calendar"][identity] = item
+        self._save()
+        self.audit("calendar_saved", identity=identity)
+
+    def calendar(self) -> Iterator[dict[str, Any]]:
+        yield from self._state["calendar"].values()

@@ -20,6 +20,6 @@
     }
   ],
   "recoveryLookbackHours": 24,
-  "pageLimit": 20,
+  "pageLimit": 50,
   "maxDeliveryAttempts": 3
 }

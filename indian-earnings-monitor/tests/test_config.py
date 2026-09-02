@@ -40,3 +40,17 @@ def test_rejects_invalid_or_duplicate_coverage(tmp_path):
     )
     with pytest.raises(ValueError, match="unique"):
         load_config(path)
+
+
+def test_rejects_page_limit_above_documented_maximum(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(
+        json.dumps(
+            {
+                "coverage": [{"symbol": "TCS", "exchange": "NSE", "owner": "tech"}],
+                "pageLimit": 51,
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="between 1 and 50"):
+        load_config(path)
