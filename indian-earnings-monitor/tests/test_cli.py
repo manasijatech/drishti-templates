@@ -175,6 +175,24 @@ def test_cli_watch_runs_the_async_sdk_path(tmp_path, monkeypatch):
     assert sdk.close_count == 1
 
 
+def test_simple_run_command_uses_the_async_sdk_path(tmp_path, monkeypatch, capsys):
+    config_path = tmp_path / "config.json"
+    state_path = tmp_path / "state"
+    write_config(config_path)
+    sdk = ClosingSdk()
+
+    async def fake_watch(_client, _config, _recover, _handle, _on_control):
+        raise KeyboardInterrupt
+
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+    monkeypatch.setattr(cli, "watch_sdk", fake_watch)
+
+    assert main(live_args(config_path, state_path, "run")) == 0
+    assert "Monitor stopped." in capsys.readouterr().out
+    assert sdk.close_count == 1
+
+
 def test_cli_closes_sdk_after_successful_finite_live_command(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     write_config(config_path)
@@ -184,6 +202,26 @@ def test_cli_closes_sdk_after_successful_finite_live_command(tmp_path, monkeypat
 
     assert main(live_args(config_path, tmp_path / "state", "live-smoke")) == 0
     assert sdk.close_count == 1
+
+
+def test_simple_check_command_runs_one_finite_live_recovery(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    write_config(config_path)
+    sdk = ClosingSdk()
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+
+    assert main(live_args(config_path, tmp_path / "state", "check")) == 0
+    assert sdk.close_count == 1
+
+
+def test_demo_prints_a_short_human_readable_summary(tmp_path, capsys):
+    assert main(["--state-dir", str(tmp_path / "state"), "demo"]) == 0
+
+    output = capsys.readouterr().out
+    assert "EARNINGS: RELIANCE" in output
+    assert "accepted=3 calendar=2 queue=3" in output
+    assert '"channel": "earnings"' not in output
 
 
 def test_cli_closes_sdk_when_live_operation_raises(tmp_path, monkeypatch):

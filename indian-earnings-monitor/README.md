@@ -1,11 +1,44 @@
 # Indian Earnings, News, and Concall Monitor
 
-A runnable, source-linked Drishti CLI for an Indian-equities research desk. It refreshes the
-upcoming earnings/concall calendar, recovers earnings/news/concall records over REST, consumes
-three independent WebSocket subscriptions through the official Drishti Python SDK, and routes
-accepted records into a durable analyst review queue.
+A small command-line tool that watches earnings, news, and concalls for the Indian companies in
+`config.example.json`. It collects matching updates in a local review queue. It does not trade,
+publish, or message anyone.
 
-This is event monitoring only. It does not place broker orders and is not a full tick feed.
+## Try it in two minutes
+
+Install it:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+```
+
+Try the safe sample first. It needs no key and makes no network calls:
+
+```bash
+drishti-monitor demo
+```
+
+For live data, set your key and choose one command:
+
+```bash
+export DRISHTI_API_KEY='...'
+
+drishti-monitor check  # fetch new updates once, then exit
+drishti-monitor run    # keep watching; press Ctrl+C to stop
+```
+
+See what was collected:
+
+```bash
+drishti-monitor queue
+drishti-monitor calendar
+```
+
+That is enough for normal use. The tool automatically stores its checkpoints and queue in
+`var/`, so you do not need to pass or manage a state directory. Edit `config.example.json` to
+change the companies, owners, and products being monitored.
 
 ## Architecture and data boundary
 
@@ -28,16 +61,12 @@ Every refresh preserves `schedule_history` and reports `schedule_status` as `sch
 whether the expected filing/call plus filing artifact, transcript, and audio have arrived.
 Upcoming requests include only symbols whose coverage enables that product.
 
-## Safe setup and authentication
+## Setup and authentication details
 
 Python 3.11 or newer is required:
 
-```bash
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -e '.[dev]'
-cp .env.example .env
-```
+Install `.[dev]` instead of `.` only when you also want the test and lint tools. `.env.example`
+documents the available environment variables, but the CLI does not automatically load `.env`.
 
 The template depends on `drishti-sdk>=1.0.15,<2`. Set `DRISHTI_API_KEY` only in the server
 process environment. The official SDK sends it in the `X-API-Key` header. Never put a real key
@@ -47,35 +76,32 @@ optional SDK base URL and must not include `/v1`.
 ## Deterministic demo
 
 ```bash
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo demo
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo queue
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo calendar
-drishti-monitor --config config.example.json --state-dir /tmp/drishti-demo failures
+drishti-monitor demo
+drishti-monitor queue
+drishti-monitor calendar
 ```
 
 `demo` needs no key or network. It runs event recovery and both upcoming-calendar refreshes
 against deterministic fixtures. Keeping its state directory demonstrates deduplication; use a
 new temporary directory for a fresh run.
 
-## Live commands
+## Advanced commands
 
 These calls can consume Drishti credits; WebSockets require an entitled paid plan.
 
 ```bash
 export DRISHTI_API_KEY='...'
 
-# Recover all three event products and refresh both calendars once, then exit.
-drishti-monitor --config config.example.json --state-dir var live-smoke
+# These older operator names remain supported for compatibility.
+drishti-monitor live-smoke
+drishti-monitor calendar-refresh
+drishti-monitor watch
 
-# Refresh or list schedule records separately.
-drishti-monitor --config config.example.json --state-dir var calendar-refresh
-drishti-monitor --config config.example.json --state-dir var calendar
-
-# Recover, connect, acknowledge subscriptions, and continue through reconnects.
-drishti-monitor --config config.example.json --state-dir var watch
+# Override defaults only when you need separate coverage or storage.
+drishti-monitor --config my-coverage.json --state-dir my-state check
 ```
 
-`watch` performs REST recovery, opens the official SDK's async managed WebSocket session, and
+`run` (or its older name, `watch`) performs REST recovery, opens the official SDK's async managed WebSocket session, and
 subscribes separately to enabled `earnings`, `news`, and `concalls` coverage with
 `detailed=True`. Only SDK events with `kind="data"` become research records. Subscription,
 heartbeat, error, and other control events are audited. The SDK owns authentication,

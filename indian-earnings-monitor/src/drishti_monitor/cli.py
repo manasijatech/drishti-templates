@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .config import CHANNELS, load_config
+from .model import ResearchEvent
 from .monitor import Monitor
 from .rest import RestClient, create_sdk_client
 from .socket import watch_sdk
@@ -17,6 +18,11 @@ from .store import Store
 
 def console_delivery(event: Any) -> None:
     print(json.dumps(event.to_dict(), sort_keys=True))
+
+
+def simple_delivery(event: ResearchEvent) -> None:
+    detail = event.headline or event.company or event.provider_id
+    print(f"{event.channel.upper()}: {event.symbol} - {detail}")
 
 
 class FixtureSdkClient:
@@ -51,27 +57,46 @@ class FixtureSdkClient:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Drishti Indian earnings monitor")
-    parser.add_argument("--config", default="config.example.json")
-    parser.add_argument("--state-dir", default="var")
-    sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("demo", help="run deterministic REST fixtures")
-    sub.add_parser("live-smoke", help="run one authenticated REST recovery")
-    sub.add_parser("watch", help="recover with REST, then monitor WebSocket events")
-    sub.add_parser("queue", help="print the analyst review queue")
-    sub.add_parser("calendar", help="print stored upcoming schedule records")
-    sub.add_parser("calendar-refresh", help="refresh both upcoming schedule products")
-    sub.add_parser("failures", help="print active parse and delivery failures")
-    retry = sub.add_parser("retry-failure", help="retry one durable failure")
+    parser = argparse.ArgumentParser(
+        description="Monitor Indian earnings, news, and concalls with Drishti.",
+        epilog=(
+            "Start with 'drishti-monitor demo'. For live data, set DRISHTI_API_KEY, "
+            "then use 'drishti-monitor check' or 'drishti-monitor run'."
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        default="config.example.json",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--state-dir",
+        default="var",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--json", action="store_true", help="print full JSON records")
+    sub = parser.add_subparsers(dest="command", metavar="COMMAND", required=True)
+    sub.add_parser("demo", help="try the monitor with safe sample data")
+    sub.add_parser("check", help="fetch live updates once, then exit")
+    sub.add_parser("run", help="keep monitoring live updates until stopped")
+    sub.add_parser("queue", help="show collected updates")
+    sub.add_parser("calendar", help="show upcoming earnings and concalls")
+
+    # Compatibility and operator commands remain available without crowding the quick start.
+    sub.add_parser("live-smoke")
+    sub.add_parser("watch")
+    sub.add_parser("calendar-refresh")
+    sub.add_parser("failures")
+    retry = sub.add_parser("retry-failure")
     retry.add_argument("failure_id")
-    note = sub.add_parser("add-note", help="append an analyst note")
+    note = sub.add_parser("add-note")
     note.add_argument("channel", choices=CHANNELS)
     note.add_argument("provider_id")
     note.add_argument("note")
-    reviewed = sub.add_parser("mark-reviewed", help="mark a queued event reviewed")
+    reviewed = sub.add_parser("mark-reviewed")
     reviewed.add_argument("channel", choices=CHANNELS)
     reviewed.add_argument("provider_id")
-    source = sub.add_parser("resolve-source", help="resolve a filing or call artifact on demand")
+    source = sub.add_parser("resolve-source")
     source.add_argument("channel", choices=("earnings", "concalls"))
     source.add_argument("provider_id")
     return parser
@@ -79,9 +104,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    command = {"check": "live-smoke", "run": "watch"}.get(args.command, args.command)
     config = load_config(args.config)
     store = Store(args.state_dir)
-    monitor = Monitor(config, store, console_delivery)
+    monitor = Monitor(config, store, console_delivery if args.json else simple_delivery)
     if args.command == "queue":
         print(json.dumps(list(store.events()), indent=2, sort_keys=True))
         return 0
@@ -101,8 +127,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "mark-reviewed":
         monitor.mark_reviewed(args.channel, args.provider_id)
         return 0
-    now = datetime(2026, 9, 2, 12, tzinfo=UTC) if args.command == "demo" else datetime.now(UTC)
-    if args.command == "demo":
+    now = datetime(2026, 9, 2, 12, tzinfo=UTC) if command == "demo" else datetime.now(UTC)
+    if command == "demo":
         fixture_path = Path(__file__).parents[2] / "fixtures" / "rest-pages.json"
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
 
@@ -110,13 +136,16 @@ def main(argv: list[str] | None = None) -> int:
     else:
         api_key = os.environ.get("DRISHTI_API_KEY")
         if not api_key:
-            raise SystemExit(f"DRISHTI_API_KEY is required for {args.command}")
+            raise SystemExit(
+                "Live monitoring needs a Drishti API key.\n"
+                "Set DRISHTI_API_KEY, then run this command again."
+            )
         sdk = create_sdk_client(
             api_key, os.environ.get("DRISHTI_BASE_URL", "https://developers.manasija.in")
         )
         try:
             rest = RestClient(sdk)
-            if args.command == "resolve-source":
+            if command == "resolve-source":
                 event = (
                     monitor.resolve_earnings_source(rest, args.provider_id)
                     if args.channel == "earnings"
@@ -124,24 +153,28 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 print(json.dumps(event.to_dict(), sort_keys=True))
                 return 0
-            if args.command == "calendar-refresh":
+            if command == "calendar-refresh":
                 items = monitor.refresh_calendar(rest)
                 print(f"calendar={len(items)}")
                 return 0
-            if args.command == "watch":
+            if command == "watch":
 
                 def recover() -> None:
                     monitor.recover(rest, datetime.now(UTC))
 
-                asyncio.run(
-                    watch_sdk(
-                        sdk,
-                        config,
-                        recover,
-                        monitor.handle_envelope,
-                        lambda kind, details: store.audit(f"websocket_{kind}", **details),
+                print("Monitoring live updates. Press Ctrl+C to stop.")
+                try:
+                    asyncio.run(
+                        watch_sdk(
+                            sdk,
+                            config,
+                            recover,
+                            monitor.handle_envelope,
+                            lambda kind, details: store.audit(f"websocket_{kind}", **details),
+                        )
                     )
-                )
+                except KeyboardInterrupt:
+                    print("Monitor stopped.")
                 return 0
             accepted = monitor.recover(rest, now)
             calendar = monitor.refresh_calendar(rest)
