@@ -41,6 +41,9 @@ def load_config(path: str | Path) -> MonitorConfig:
             raise ValueError("coverage symbols must be non-empty and unique")
         if not channels or any(channel not in CHANNELS for channel in channels):
             raise ValueError(f"{symbol} has an unsupported channel")
+        review_sla_minutes = int(item.get("reviewSlaMinutes", 60))
+        if review_sla_minutes <= 0:
+            raise ValueError("reviewSlaMinutes must be greater than 0")
         seen.add(symbol)
         coverage.append(
             Coverage(
@@ -50,15 +53,21 @@ def load_config(path: str | Path) -> MonitorConfig:
                 priority=str(item.get("priority", "normal")),
                 channels=cast(tuple[Channel, ...], channels),
                 delivery=tuple(str(value) for value in item.get("delivery", ["research-queue"])),
-                review_sla_minutes=int(item.get("reviewSlaMinutes", 60)),
+                review_sla_minutes=review_sla_minutes,
             )
         )
     page_limit = int(raw.get("pageLimit", 20))
     if not 1 <= page_limit <= 50:
         raise ValueError("pageLimit must be between 1 and 50")
+    recovery_lookback_hours = int(raw.get("recoveryLookbackHours", 24))
+    if recovery_lookback_hours < 0:
+        raise ValueError("recoveryLookbackHours must be greater than or equal to 0")
+    max_delivery_attempts = int(raw.get("maxDeliveryAttempts", 3))
+    if max_delivery_attempts <= 0:
+        raise ValueError("maxDeliveryAttempts must be greater than 0")
     return MonitorConfig(
         tuple(coverage),
-        int(raw.get("recoveryLookbackHours", 24)),
+        recovery_lookback_hours,
         page_limit,
-        int(raw.get("maxDeliveryAttempts", 3)),
+        max_delivery_attempts,
     )
