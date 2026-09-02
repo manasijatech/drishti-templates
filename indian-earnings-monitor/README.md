@@ -22,8 +22,11 @@ delivered `ResearchEvent` records implicitly. Provider source content is separat
 unused `generated_summary` field; this version performs no AI generation.
 
 Coverage owners, priorities, delivery names, and SLAs are local operator policy. Drishti's
-upcoming APIs do not assign analysts, so assigning or changing calendar ownership remains an
-explicit operator workflow outside the provider record.
+upcoming APIs do not assign analysts, so each calendar record deterministically inherits its
+owner from coverage configuration; changing ownership is an explicit configuration workflow.
+Every refresh preserves `schedule_history` and reports `schedule_status` as `scheduled`,
+`changed`, or `unconfirmed`. Calendar records also show related delivered identities and
+whether the expected filing/call plus filing artifact, transcript, and audio have arrived.
 
 ## Safe setup and authentication
 
@@ -99,6 +102,14 @@ Parsing failures and exhausted delivery attempts remain visible and retryable un
 resolution is audited rather than deleting history. Amendments preserve both records and expose
 `amendment_of` plus `related_identities` in queue output.
 
+Cross-product relations are deliberately deterministic and bidirectional. Earnings and concalls
+relate only when both have the same symbol and verified quarter. Quarterless news relates to an
+earnings or concall record only when the symbol and provider source-date (`YYYY-MM-DD`) match;
+the monitor never invents a quarter. This conservative news rule can omit stories published on a
+different date even when an analyst would consider them related. Calendar reconciliation uses a
+unique product+symbol+quarter match (or a unique product+symbol candidate when the event has no
+quarter); ambiguous schedules remain unlinked for operator review.
+
 News sources use the verified `link` field. Earnings PDFs are resolved on demand with
 `GET /v1/earnings/attachments`, whose result is `data[{id,status,url,...}]`. Concall artifacts
 are resolved with `GET /v1/concalls/transcript?symbol=...&quarter=...`, returning verified
@@ -149,7 +160,7 @@ Consulted 2026-09-02:
 
 ## Known limitations
 
-There is no calendar-owner mutation command, cross-product semantic correlation, third-party
+There is no calendar-owner mutation command, fuzzy/semantic relation inference, third-party
 delivery adapter, AI summarization, broker execution, or tick feed. Artifact URLs may expire;
-resolve them again on demand. JSON state is suitable for this focused single-process template,
-not concurrent multi-process writers.
+resolve them again on demand. Ambiguous calendar matches are intentionally left unlinked. JSON
+state is suitable for this focused single-process template, not concurrent multi-process writers.

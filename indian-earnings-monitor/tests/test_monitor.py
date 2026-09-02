@@ -109,7 +109,141 @@ def test_upcoming_calendar_paginates_and_stays_separate_from_events(tmp_path):
     assert [item["product"] for item in calendar] == ["earnings", "concalls"]
     assert calendar[0]["event_id"] == "event-1"
     assert calendar[1]["scheduled_time"] == "2026-09-11T16:00:00Z"
-    assert all("ignored" not in item and "owner" not in item for item in calendar)
+    assert all("ignored" not in item and item["owner"] == "energy-desk" for item in calendar)
+
+
+def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tmp_path):
+    earnings_date = "2026-09-10T00:00:00Z"
+
+    def get(url, _headers):
+        parsed = urlparse(url)
+        if parsed.path.endswith("/earnings/upcoming"):
+            return {
+                "data": [
+                    {
+                        "id": "ue1",
+                        "symbol": "RELIANCE",
+                        "quarter": "q1_27",
+                        "date": earnings_date,
+                    }
+                ],
+                "has_next": False,
+            }
+        if parsed.path.endswith("/concalls/upcoming"):
+            return {
+                "data": [
+                    {
+                        "id": "uc1",
+                        "symbol": "RELIANCE",
+                        "quarter": "q1_27",
+                        "meeting_date": None,
+                    }
+                ],
+                "has_next": False,
+            }
+        if parsed.path.endswith("/earnings/attachments"):
+            return {"data": [{"id": "e1", "status": "ready", "url": "https://source/e1.pdf"}]}
+        return {
+            "transcript_url": "https://source/c1.pdf",
+            "audio_url": "https://source/c1.mp3",
+        }
+
+    store = Store(tmp_path)
+    monitor = Monitor(config(), store, lambda _event: None)
+    rest = RestClient("https://example.invalid/v1", "x", get)
+    monitor.refresh_calendar(rest)
+    earnings_date = "2026-09-12T00:00:00Z"
+    monitor.refresh_calendar(rest)
+
+    before = {item["product"]: item for item in store.calendar()}
+    assert before["earnings"]["owner"] == "energy-desk"
+    assert before["earnings"]["schedule_status"] == "changed"
+    assert before["earnings"]["schedule_history"] == [
+        "2026-09-10T00:00:00Z",
+        "2026-09-12T00:00:00Z",
+    ]
+    assert before["concalls"]["schedule_status"] == "unconfirmed"
+
+    common = {"symbol": "RELIANCE", "quarter": "q1_27", "date": "2026-09-12T09:00:00Z"}
+    monitor.handle_envelope(
+        {"channel": "earnings", "data": {"id": "e1", **common}}, "2026-09-12T09:01:00Z"
+    )
+    monitor.handle_envelope(
+        {"channel": "concalls", "data": {"id": "c1", **common}}, "2026-09-12T09:02:00Z"
+    )
+    monitor.resolve_earnings_source(rest, "e1")
+    monitor.resolve_concall_sources(rest, "c1")
+
+    after = {item["product"]: item for item in store.calendar()}
+    assert list(store.events()) != list(store.calendar())
+    assert after["earnings"]["related_event_identities"] == ["earnings:e1"]
+    assert after["earnings"]["event_arrived"] is True
+    assert after["earnings"]["filing_arrived"] is True
+    assert after["earnings"]["filing_artifact_arrived"] is True
+    assert after["concalls"]["related_event_identities"] == ["concalls:c1"]
+    assert after["concalls"]["event_arrived"] is True
+    assert after["concalls"]["call_arrived"] is True
+    assert after["concalls"]["transcript_arrived"] is True
+    assert after["concalls"]["audio_arrived"] is True
+
+    monitor.handle_envelope(
+        {"channel": "earnings", "data": {"id": "e2", **common}},
+        "2026-09-12T09:03:00Z",
+    )
+    assert (
+        next(item for item in store.calendar() if item["product"] == "earnings")[
+            "filing_artifact_arrived"
+        ]
+        is True
+    )
+
+
+def test_cross_product_relations_use_quarter_or_conservative_news_date(tmp_path):
+    store = Store(tmp_path)
+    monitor = Monitor(config(), store, lambda _event: None)
+    monitor.handle_envelope(
+        {
+            "channel": "earnings",
+            "data": {
+                "id": "e1",
+                "symbol": "RELIANCE",
+                "quarter": "q1_27",
+                "date": "2026-09-02T09:00:00Z",
+            },
+        },
+        "2026-09-02T09:01:00Z",
+    )
+    monitor.handle_envelope(
+        {
+            "channel": "concalls",
+            "data": {
+                "id": "c1",
+                "symbol": "RELIANCE",
+                "quarter": "q1_27",
+                "date": "2026-09-03T09:00:00Z",
+            },
+        },
+        "2026-09-03T09:01:00Z",
+    )
+    monitor.handle_envelope(
+        {
+            "channel": "news",
+            "data": {"id": "n1", "symbol": "RELIANCE", "date": "2026-09-02T15:00:00Z"},
+        },
+        "2026-09-02T15:01:00Z",
+    )
+    monitor.handle_envelope(
+        {
+            "channel": "news",
+            "data": {"id": "n2", "symbol": "RELIANCE", "date": "2026-09-04T15:00:00Z"},
+        },
+        "2026-09-04T15:01:00Z",
+    )
+
+    assert store.event("earnings", "e1").related_identities == ["concalls:c1", "news:n1"]
+    assert store.event("concalls", "c1").related_identities == ["earnings:e1"]
+    assert store.event("news", "n1").related_identities == ["earnings:e1"]
+    assert store.event("news", "n2").related_identities == []
 
 
 def test_envelope_normalizes_routes_deduplicates_and_preserves_source(tmp_path):
@@ -313,8 +447,8 @@ def test_resolved_artifacts_are_exposed_and_amendments_link_both_versions(tmp_pa
     assert earnings.source_url == "https://source/result.pdf"
     assert concall.source_url == "https://source/transcript.pdf"
     assert concall.audio_url == "https://source/audio.mp3"
-    assert store.event("earnings", "e1").related_identities == ["earnings:e2"]
-    assert store.event("earnings", "e2").related_identities == ["earnings:e1"]
+    assert store.event("earnings", "e1").related_identities == ["earnings:e2", "concalls:c1"]
+    assert store.event("earnings", "e2").related_identities == ["earnings:e1", "concalls:c1"]
 
 
 def test_recovery_checkpoint_advances_only_after_complete_window_and_restart_is_gap_safe(tmp_path):

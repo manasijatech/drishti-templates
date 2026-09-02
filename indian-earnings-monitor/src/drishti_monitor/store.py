@@ -78,12 +78,35 @@ class Store:
                 related = prior_event.setdefault("related_identities", [])
                 if identity not in related:
                     related.append(identity)
+        for existing_identity, existing in self._state["events"].items():
+            if self._is_cross_product_relation(event, existing):
+                event.related_identities.append(existing_identity)
+                existing_related = existing.setdefault("related_identities", [])
+                if identity not in existing_related:
+                    existing_related.append(identity)
         self._state["events"][identity] = event.to_dict()
         if business_key:
             self._state["business_keys"][business_key] = identity
         self._save()
         self.audit(status, identity=identity, amendment_of=event.amendment_of)
         return status, event
+
+    @staticmethod
+    def _is_cross_product_relation(event: ResearchEvent, existing: dict[str, Any]) -> bool:
+        existing_channel = existing.get("channel")
+        if existing_channel == event.channel or existing.get("symbol") != event.symbol:
+            return False
+        channel_pair = {event.channel, existing_channel}
+        if channel_pair == {"earnings", "concalls"}:
+            return event.quarter is not None and event.quarter == existing.get("quarter")
+        if "news" not in channel_pair:
+            return False
+        news_is_quarterless = (
+            event.quarter is None if event.channel == "news" else existing.get("quarter") is None
+        )
+        return (
+            news_is_quarterless and event.source_time[:10] == str(existing.get("source_time"))[:10]
+        )
 
     def update(self, event: ResearchEvent, action: str) -> None:
         identity = f"{event.channel}:{event.provider_id}"
@@ -149,9 +172,74 @@ class Store:
 
     def save_calendar(self, product: str, item: dict[str, Any]) -> None:
         identity = f"{product}:{item['provider_id']}"
-        self._state["calendar"][identity] = item
+        existing = self._state["calendar"].get(identity, {})
+        history = list(existing.get("schedule_history", []))
+        scheduled_time = item.get("scheduled_time")
+        if scheduled_time not in history:
+            history.append(scheduled_time)
+        schedule_status = (
+            "unconfirmed"
+            if scheduled_time is None
+            else "changed"
+            if len(history) > 1
+            else "scheduled"
+        )
+        merged = {
+            **existing,
+            **item,
+            "schedule_history": history,
+            "schedule_status": schedule_status,
+            "related_event_identities": existing.get("related_event_identities", []),
+            "event_arrived": existing.get("event_arrived", False),
+        }
+        if product == "earnings":
+            merged["filing_arrived"] = existing.get("filing_arrived", False)
+            merged["filing_artifact_arrived"] = existing.get("filing_artifact_arrived", False)
+        else:
+            merged["call_arrived"] = existing.get("call_arrived", False)
+            merged["transcript_arrived"] = existing.get("transcript_arrived", False)
+            merged["audio_arrived"] = existing.get("audio_arrived", False)
+        self._state["calendar"][identity] = merged
         self._save()
         self.audit("calendar_saved", identity=identity)
 
     def calendar(self) -> Iterator[dict[str, Any]]:
         yield from self._state["calendar"].values()
+
+    def reconcile_calendar(self, event: ResearchEvent) -> None:
+        if event.channel not in ("earnings", "concalls"):
+            return
+        candidates = [
+            (identity, item)
+            for identity, item in self._state["calendar"].items()
+            if item.get("product") == event.channel and item.get("symbol") == event.symbol
+        ]
+        if event.quarter is not None:
+            candidates = [item for item in candidates if item[1].get("quarter") == event.quarter]
+        if len(candidates) != 1:
+            return
+        calendar_identity, calendar_item = candidates[0]
+        event_identity = f"{event.channel}:{event.provider_id}"
+        related = calendar_item.setdefault("related_event_identities", [])
+        if event_identity not in related:
+            related.append(event_identity)
+        calendar_item["event_arrived"] = True
+        if event.channel == "earnings":
+            calendar_item["filing_arrived"] = True
+            calendar_item["filing_artifact_arrived"] = (
+                calendar_item.get("filing_artifact_arrived", False) or event.source_url is not None
+            )
+        else:
+            calendar_item["call_arrived"] = True
+            calendar_item["transcript_arrived"] = (
+                calendar_item.get("transcript_arrived", False) or event.source_url is not None
+            )
+            calendar_item["audio_arrived"] = (
+                calendar_item.get("audio_arrived", False) or event.audio_url is not None
+            )
+        self._save()
+        self.audit(
+            "calendar_reconciled",
+            identity=calendar_identity,
+            event_identity=event_identity,
+        )

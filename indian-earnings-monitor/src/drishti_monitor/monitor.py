@@ -15,6 +15,7 @@ class Monitor:
         self.config = config
         self.store = store
         self.deliverer = deliverer
+        self._coverage_by_symbol = {item.symbol: item for item in config.coverage}
 
     def recover(self, rest: RestClient, now: datetime) -> list[ResearchEvent]:
         accepted: list[ResearchEvent] = []
@@ -47,18 +48,28 @@ class Monitor:
                     symbol = payload.get("symbol")
                     if not isinstance(provider_id, str) or not isinstance(symbol, str):
                         raise ValueError(f"invalid upcoming {product} item")
+                    coverage = self._coverage_by_symbol.get(symbol.upper())
+                    if coverage is None:
+                        self.store.audit(
+                            "calendar_ignored_outside_coverage", product=product, symbol=symbol
+                        )
+                        continue
                     scheduled_field = "date" if product == "earnings" else "meeting_date"
                     item: dict[str, Any] = {
                         "provider_id": provider_id,
                         "product": product,
                         "symbol": symbol,
                         "scheduled_time": payload.get(scheduled_field),
+                        "owner": coverage.owner,
                     }
                     for field in verified_fields[product]:
                         value = payload.get(field)
                         if value is not None:
                             item[field] = value
                     self.store.save_calendar(product, item)
+                    for raw_event in self.store.events():
+                        if raw_event.get("channel") == product:
+                            self.store.reconcile_calendar(ResearchEvent(**raw_event))
                     accepted.append(item)
         return accepted
 
@@ -68,6 +79,7 @@ class Monitor:
         item = next((value for value in matches if value.get("id") == provider_id), None)
         event.source_url = item.get("url") if item and item.get("status") == "ready" else None
         self.store.update(event, "source_resolved")
+        self.store.reconcile_calendar(event)
         return event
 
     def resolve_concall_sources(self, rest: RestClient, provider_id: str) -> ResearchEvent:
@@ -80,6 +92,7 @@ class Monitor:
         event.source_url = transcript if isinstance(transcript, str) else None
         event.audio_url = audio if isinstance(audio, str) else None
         self.store.update(event, "source_resolved")
+        self.store.reconcile_calendar(event)
         return event
 
     def handle_envelope(self, envelope: dict[str, Any], received_time: str) -> ResearchEvent | None:
@@ -115,9 +128,7 @@ class Monitor:
 
     def _process_event(self, event: ResearchEvent) -> ResearchEvent | None:
         channel = event.channel
-        coverage = next(
-            (item for item in self.config.coverage if item.symbol == event.symbol), None
-        )
+        coverage = self._coverage_by_symbol.get(event.symbol)
         if coverage is None or channel not in coverage.channels:
             self.store.audit("ignored_outside_coverage", channel=channel, symbol=event.symbol)
             return None
@@ -132,6 +143,7 @@ class Monitor:
         if status == "duplicate":
             self.store.audit("duplicate_ignored", identity=f"{channel}:{event.provider_id}")
             return None
+        self.store.reconcile_calendar(event)
         deliver_with_retry(event, self.store, self.deliverer, self.config.max_delivery_attempts)
         return event
 
