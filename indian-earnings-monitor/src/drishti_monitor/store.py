@@ -75,6 +75,20 @@ class Store:
             event.priority = "high"
             prior_event = self._state["events"].get(prior)
             if isinstance(prior_event, dict):
+                research_fields = (
+                    "company",
+                    "source_time",
+                    "source_url",
+                    "audio_url",
+                    "quarter",
+                    "headline",
+                    "source_content",
+                )
+                event.amendment_changes = {
+                    field: {"before": prior_event.get(field), "after": getattr(event, field)}
+                    for field in research_fields
+                    if prior_event.get(field) != getattr(event, field)
+                }
                 related = prior_event.setdefault("related_identities", [])
                 if identity not in related:
                     related.append(identity)
@@ -243,3 +257,22 @@ class Store:
             identity=calendar_identity,
             event_identity=event_identity,
         )
+
+    def recompute_calendar(self, product: str) -> None:
+        for item in self._state["calendar"].values():
+            if item.get("product") != product:
+                continue
+            item["related_event_identities"] = []
+            item["event_arrived"] = False
+            if product == "earnings":
+                item["filing_arrived"] = False
+                item["filing_artifact_arrived"] = False
+            else:
+                item["call_arrived"] = False
+                item["transcript_arrived"] = False
+                item["audio_arrived"] = False
+        self._save()
+        for raw_event in self._state["events"].values():
+            if raw_event.get("channel") == product:
+                self.reconcile_calendar(ResearchEvent(**raw_event))
+        self.audit("calendar_recomputed", product=product)

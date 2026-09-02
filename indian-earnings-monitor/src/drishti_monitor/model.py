@@ -24,7 +24,9 @@ class ResearchEvent:
     source_content: str | None = None
     generated_summary: str | None = None
     amendment_of: str | None = None
+    amendment_changes: dict[str, dict[str, Any]] = field(default_factory=dict)
     related_identities: list[str] = field(default_factory=list)
+    routing_reason: str | None = None
     owner: str | None = None
     priority: str = "normal"
     review_deadline: str | None = None
@@ -55,11 +57,12 @@ def normalize(channel: Channel, payload: dict[str, Any], received_time: str) -> 
         url_value = payload.get("transcript_url")
     headline_value = payload.get("title") if channel == "news" else payload.get("summary")
     source_content = payload.get("summary") if isinstance(payload.get("summary"), str) else None
+    company = company_value if isinstance(company_value, str) and company_value else None
     return ResearchEvent(
         provider_id=raw_provider_id,
         channel=channel,
         symbol=raw_symbol.upper(),
-        company=company_value if isinstance(company_value, str) else None,
+        company=company or f"{raw_symbol.upper()} (company name unavailable)",
         source_time=raw_source_time,
         received_time=received_time,
         source_url=url_value if isinstance(url_value, str) else None,

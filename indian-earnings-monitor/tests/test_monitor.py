@@ -112,6 +112,147 @@ def test_upcoming_calendar_paginates_and_stays_separate_from_events(tmp_path):
     assert all("ignored" not in item and item["owner"] == "energy-desk" for item in calendar)
 
 
+def test_calendar_refresh_requests_and_saves_only_product_enabled_symbols(tmp_path):
+    requested = {}
+    coverage = (
+        Coverage(
+            "RELIANCE",
+            "NSE",
+            "energy-desk",
+            "normal",
+            ("earnings", "concalls"),
+            (),
+            30,
+        ),
+        Coverage("ONLYNEWS", "NSE", "news-desk", "normal", ("news",), (), 30),
+    )
+
+    def get(url, _headers):
+        parsed = urlparse(url)
+        product = parsed.path.split("/")[-2]
+        requested[product] = parse_qs(parsed.query)["symbols"][0].split(",")
+        date_field = "date" if product == "earnings" else "meeting_date"
+        return {
+            "data": [
+                {"id": f"{product}-covered", "symbol": "RELIANCE", date_field: "2026-09-10"},
+                {"id": f"{product}-excluded", "symbol": "ONLYNEWS", date_field: "2026-09-10"},
+            ],
+            "has_next": False,
+        }
+
+    store = Store(tmp_path)
+    Monitor(MonitorConfig(coverage), store, lambda _event: None).refresh_calendar(
+        RestClient("https://example.invalid/v1", "x", get)
+    )
+
+    assert requested == {"earnings": ["RELIANCE"], "concalls": ["RELIANCE"]}
+    assert {item["symbol"] for item in store.calendar()} == {"RELIANCE"}
+
+
+def test_amendment_persists_only_changed_provider_research_fields(tmp_path):
+    store = Store(tmp_path)
+    monitor = Monitor(config(), store, lambda _event: None)
+    common = {
+        "symbol": "RELIANCE",
+        "company_name": "Reliance Industries",
+        "quarter": "q1_27",
+        "date": "2026-09-02T09:00:00Z",
+    }
+    monitor.handle_envelope(
+        {"channel": "earnings", "data": {"id": "e1", "summary": "Original filing", **common}},
+        "2026-09-02T09:01:00Z",
+    )
+    monitor.handle_envelope(
+        {"channel": "earnings", "data": {"id": "e2", "summary": "Amended filing", **common}},
+        "2026-09-02T09:02:00Z",
+    )
+
+    amendment = store.event("earnings", "e2")
+    assert amendment.amendment_changes == {
+        "headline": {"before": "Original filing", "after": "Amended filing"},
+        "source_content": {"before": "Original filing", "after": "Amended filing"},
+    }
+    assert not {
+        "delivery_attempts",
+        "delivery_state",
+        "owner",
+        "priority",
+        "related_identities",
+        "review_deadline",
+        "review_state",
+    }.intersection(amendment.amendment_changes)
+
+
+def test_concall_queue_has_company_fallback_and_explicit_routing_reason(tmp_path):
+    store = Store(tmp_path)
+    monitor = Monitor(config(), store, lambda _event: None)
+    event = monitor.handle_envelope(
+        {
+            "channel": "concalls",
+            "data": {
+                "id": "c1",
+                "symbol": "RELIANCE",
+                "quarter": "q1_27",
+                "date": "2026-09-02T09:00:00Z",
+            },
+        },
+        "2026-09-02T09:01:00Z",
+    )
+
+    assert event is not None
+    queued = store.event("concalls", "c1")
+    assert queued.company == "RELIANCE (company name unavailable)"
+    assert queued.routing_reason == (
+        "Matched concalls coverage for RELIANCE; assigned to energy-desk"
+    )
+
+
+def test_complete_calendar_refresh_clears_provisional_ambiguous_matches(tmp_path):
+    store = Store(tmp_path)
+    monitor = Monitor(config(), store, lambda _event: None)
+    monitor.handle_envelope(
+        {
+            "channel": "earnings",
+            "data": {
+                "id": "e1",
+                "symbol": "RELIANCE",
+                "quarter": "q1_27",
+                "date": "2026-09-02T09:00:00Z",
+            },
+        },
+        "2026-09-02T09:01:00Z",
+    )
+
+    def get(url, _headers):
+        if urlparse(url).path.endswith("/concalls/upcoming"):
+            return {"data": [], "has_next": False}
+        return {
+            "data": [
+                {
+                    "id": "ue1",
+                    "symbol": "RELIANCE",
+                    "quarter": "q1_27",
+                    "date": "2026-09-10",
+                },
+                {
+                    "id": "ue2",
+                    "symbol": "RELIANCE",
+                    "quarter": "q1_27",
+                    "date": "2026-09-11",
+                },
+            ],
+            "has_next": False,
+        }
+
+    monitor.refresh_calendar(RestClient("https://example.invalid/v1", "x", get))
+
+    earnings_rows = [item for item in store.calendar() if item["product"] == "earnings"]
+    assert len(earnings_rows) == 2
+    assert all(item["related_event_identities"] == [] for item in earnings_rows)
+    assert all(item["event_arrived"] is False for item in earnings_rows)
+    assert all(item["filing_arrived"] is False for item in earnings_rows)
+
+
 def test_calendar_tracks_owner_date_status_history_and_event_artifact_arrival(tmp_path):
     earnings_date = "2026-09-10T00:00:00Z"
 

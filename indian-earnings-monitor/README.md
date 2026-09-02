@@ -27,6 +27,7 @@ owner from coverage configuration; changing ownership is an explicit configurati
 Every refresh preserves `schedule_history` and reports `schedule_status` as `scheduled`,
 `changed`, or `unconfirmed`. Calendar records also show related delivered identities and
 whether the expected filing/call plus filing artifact, transcript, and audio have arrived.
+Upcoming requests include only symbols whose coverage enables that product.
 
 ## Safe setup and authentication
 
@@ -100,7 +101,14 @@ drishti-monitor --config config.example.json --state-dir var resolve-source conc
 
 Parsing failures and exhausted delivery attempts remain visible and retryable until resolved;
 resolution is audited rather than deleting history. Amendments preserve both records and expose
-`amendment_of` plus `related_identities` in queue output.
+`amendment_of`, `related_identities`, and `amendment_changes` in queue output. The latter maps
+changed source/research field names to `{before, after}` values and deliberately excludes local
+workflow state such as assignment, review, delivery, notes, routing, and relationships.
+
+Every queued event has an internal `routing_reason` naming the matched symbol/product coverage
+and assigned owner. When a provider row has no company name, the display value is
+`<SYMBOL> (company name unavailable)` rather than a null label; this is display metadata, not a
+provider-supplied company field.
 
 Cross-product relations are deliberately deterministic and bidirectional. Earnings and concalls
 relate only when both have the same symbol and verified quarter. Quarterless news relates to an

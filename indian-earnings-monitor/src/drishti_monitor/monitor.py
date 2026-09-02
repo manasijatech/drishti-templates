@@ -36,12 +36,12 @@ class Monitor:
 
     def refresh_calendar(self, rest: RestClient) -> list[dict[str, Any]]:
         accepted: list[dict[str, Any]] = []
-        symbols = [item.symbol for item in self.config.coverage]
         verified_fields = {
             "earnings": ("event_id", "company", "date", "purpose", "title", "quarter"),
             "concalls": ("meeting_date", "quarter", "intimation_attachment"),
         }
         for product in ("earnings", "concalls"):
+            symbols = [item.symbol for item in self.config.coverage if product in item.channels]
             for page in rest.upcoming(product, symbols, self.config.page_limit):
                 for payload in page:
                     provider_id = payload.get("id")
@@ -49,7 +49,7 @@ class Monitor:
                     if not isinstance(provider_id, str) or not isinstance(symbol, str):
                         raise ValueError(f"invalid upcoming {product} item")
                     coverage = self._coverage_by_symbol.get(symbol.upper())
-                    if coverage is None:
+                    if coverage is None or product not in coverage.channels:
                         self.store.audit(
                             "calendar_ignored_outside_coverage", product=product, symbol=symbol
                         )
@@ -67,10 +67,8 @@ class Monitor:
                         if value is not None:
                             item[field] = value
                     self.store.save_calendar(product, item)
-                    for raw_event in self.store.events():
-                        if raw_event.get("channel") == product:
-                            self.store.reconcile_calendar(ResearchEvent(**raw_event))
                     accepted.append(item)
+            self.store.recompute_calendar(product)
         return accepted
 
     def resolve_earnings_source(self, rest: RestClient, provider_id: str) -> ResearchEvent:
@@ -134,6 +132,9 @@ class Monitor:
             return None
         event.owner = coverage.owner
         event.priority = coverage.priority
+        event.routing_reason = (
+            f"Matched {channel} coverage for {event.symbol}; assigned to {coverage.owner}"
+        )
         deadline = datetime.fromisoformat(event.received_time) + timedelta(
             minutes=coverage.review_sla_minutes
         )
