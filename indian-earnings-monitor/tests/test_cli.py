@@ -1,6 +1,8 @@
 import json
+from datetime import UTC, datetime
 
 import pytest
+from drishti_sdk.exceptions import DrishtiApiError
 
 import drishti_monitor.cli as cli
 from drishti_monitor.cli import main
@@ -193,6 +195,48 @@ def test_simple_run_command_uses_the_async_sdk_path(tmp_path, monkeypatch, capsy
     assert sdk.close_count == 1
 
 
+def test_run_reuses_a_recent_check_instead_of_repeating_rest_calls(tmp_path, monkeypatch, capsys):
+    config_path = tmp_path / "config.json"
+    state_path = tmp_path / "state"
+    write_config(config_path)
+    store = Store(state_path)
+    checkpoint = datetime.now(UTC).isoformat()
+    for channel in ("earnings", "news", "concalls"):
+        store.save_checkpoint(channel, checkpoint)
+    sdk = ClosingSdk(AssertionError("REST recovery should have been skipped"))
+
+    async def fake_watch(_client, _config, recover, _handle, _on_control):
+        recover()
+
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+    monkeypatch.setattr(cli, "watch_sdk", fake_watch)
+
+    assert main(live_args(config_path, state_path, "run")) == 0
+    assert "Using the recent check" in capsys.readouterr().out
+    assert sdk.close_count == 1
+
+
+def test_run_continues_to_websocket_when_rest_recovery_is_rate_limited(
+    tmp_path, monkeypatch, capsys
+):
+    config_path = tmp_path / "config.json"
+    state_path = tmp_path / "state"
+    write_config(config_path)
+    sdk = ClosingSdk(DrishtiApiError(429, {"error": {"code": "rate_limit_exceeded"}}))
+
+    async def fake_watch(_client, _config, recover, _handle, _on_control):
+        recover()
+
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+    monkeypatch.setattr(cli, "watch_sdk", fake_watch)
+
+    assert main(live_args(config_path, state_path, "run")) == 0
+    assert "continuing with live monitoring" in capsys.readouterr().out
+    assert sdk.close_count == 1
+
+
 def test_cli_closes_sdk_after_successful_finite_live_command(tmp_path, monkeypatch):
     config_path = tmp_path / "config.json"
     write_config(config_path)
@@ -233,4 +277,16 @@ def test_cli_closes_sdk_when_live_operation_raises(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="SDK failure"):
         main(live_args(config_path, tmp_path / "state", "calendar-refresh"))
+    assert sdk.close_count == 1
+
+
+def test_finite_command_shows_a_readable_rate_limit_error(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    write_config(config_path)
+    sdk = ClosingSdk(DrishtiApiError(429, {"error": {"code": "rate_limit_exceeded"}}))
+    monkeypatch.setenv("DRISHTI_API_KEY", "test-only-key")
+    monkeypatch.setattr(cli, "create_sdk_client", lambda _key, _base: sdk)
+
+    with pytest.raises(SystemExit, match="Wait one minute"):
+        main(live_args(config_path, tmp_path / "state", "check"))
     assert sdk.close_count == 1

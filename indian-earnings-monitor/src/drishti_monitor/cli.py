@@ -4,11 +4,13 @@ import argparse
 import asyncio
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from .config import CHANNELS, load_config
+from drishti_sdk.exceptions import DrishtiApiError
+
+from .config import CHANNELS, MonitorConfig, load_config
 from .model import ResearchEvent
 from .monitor import Monitor
 from .rest import RestClient, create_sdk_client
@@ -23,6 +25,30 @@ def console_delivery(event: Any) -> None:
 def simple_delivery(event: ResearchEvent) -> None:
     detail = event.headline or event.company or event.provider_id
     print(f"{event.channel.upper()}: {event.symbol} - {detail}")
+
+
+def _recovery_is_recent(
+    store: Store,
+    config: MonitorConfig,
+    now: datetime,
+    *,
+    maximum_age: timedelta = timedelta(minutes=1),
+) -> bool:
+    enabled_channels = {channel for coverage in config.coverage for channel in coverage.channels}
+    if not enabled_channels:
+        return False
+    for channel in enabled_channels:
+        value = store.checkpoint(channel)
+        if value is None:
+            return False
+        try:
+            checkpoint = datetime.fromisoformat(value).astimezone(UTC)
+        except (ValueError, TypeError):
+            return False
+        age = now.astimezone(UTC) - checkpoint
+        if age < timedelta(0) or age > maximum_age:
+            return False
+    return True
 
 
 class FixtureSdkClient:
@@ -160,7 +186,21 @@ def main(argv: list[str] | None = None) -> int:
             if command == "watch":
 
                 def recover() -> None:
-                    monitor.recover(rest, datetime.now(UTC))
+                    recovery_time = datetime.now(UTC)
+                    if _recovery_is_recent(store, config, recovery_time):
+                        print("Using the recent check; starting live monitoring.")
+                        store.audit("recovery_skipped_recent_checkpoint")
+                        return
+                    try:
+                        monitor.recover(rest, recovery_time)
+                    except DrishtiApiError as error:
+                        if error.status_code != 429:
+                            raise
+                        print(
+                            "REST refresh reached Drishti's per-minute limit; "
+                            "continuing with live monitoring."
+                        )
+                        store.audit("recovery_rate_limited", status_code=error.status_code)
 
                 print("Monitoring live updates. Press Ctrl+C to stop.")
                 try:
@@ -183,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"queue={sum(1 for _ in store.events())}"
             )
             return 0
+        except DrishtiApiError as error:
+            if error.status_code == 429:
+                raise SystemExit(
+                    "Drishti's per-minute limit was reached. Wait one minute, then try again."
+                ) from None
+            raise
         finally:
             sdk.close()
     accepted = monitor.recover(rest, now)
