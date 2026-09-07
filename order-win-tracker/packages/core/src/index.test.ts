@@ -11,6 +11,7 @@ import {
   type AnnouncementSource,
   IngestionConflictError,
   IngestionLeaseLostError,
+  type IngestionProgressEvent,
   normalizeAnnouncement,
   OrderWinIngestionService,
   type OrderWinRepository,
@@ -124,11 +125,17 @@ describe("OrderWinIngestionService", () => {
   test("paginates, normalizes, and records idempotent outcomes", async () => {
     const source = new FakeSource();
     const repository = new FakeRepository();
+    const progress: IngestionProgressEvent[] = [];
     const now = new Date("2026-09-07T10:00:00Z");
     const service = new OrderWinIngestionService(
       source,
       repository,
-      { pageSize: 50, maxPages: 10, lockDurationMs: 60_000 },
+      {
+        pageSize: 50,
+        maxPages: 10,
+        lockDurationMs: 60_000,
+        onProgress: (event) => progress.push(event),
+      },
       () => now,
       () => "lock-1",
     );
@@ -146,6 +153,17 @@ describe("OrderWinIngestionService", () => {
     expect(run.recordsUnchanged).toBe(1);
     expect(repository.released).toBe(true);
     expect(repository.renewals).toBe(2);
+    expect(progress.map((event) => event.type)).toEqual([
+      "run-started",
+      "page-fetched",
+      "row-processed",
+      "page-fetched",
+      "row-processed",
+      "run-completed",
+    ]);
+    expect(
+      progress.filter((event) => event.type === "row-processed").map((event) => event.outcome),
+    ).toEqual(["inserted", "unchanged"]);
   });
 
   test("passes configured symbols to every source page", async () => {

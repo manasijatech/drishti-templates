@@ -9,6 +9,8 @@
   "scripts": {
     "build": "turbo run build",
     "check": "turbo run typecheck lint",
+    "cli": "bun --cwd apps/cli start",
+    "cli:demo": "bun --cwd apps/cli demo",
     "dev": "turbo run dev",
     "lint": "biome check .",
     "test": "turbo run test"

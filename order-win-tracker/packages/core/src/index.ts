@@ -55,7 +55,27 @@ export type IngestionOptions = {
   readonly pageSize: number;
   readonly maxPages: number;
   readonly lockDurationMs: number;
+  readonly onProgress?: (event: IngestionProgressEvent) => void;
 };
+
+export type IngestionProgressEvent =
+  | { readonly type: "run-started"; readonly run: IngestionRun }
+  | {
+      readonly type: "page-fetched";
+      readonly page: number;
+      readonly rowCount: number;
+      readonly hasNext: boolean;
+      readonly run: IngestionRun;
+    }
+  | {
+      readonly type: "row-processed";
+      readonly sourceAnnouncementId: string;
+      readonly symbol: string;
+      readonly companyName: string | null;
+      readonly outcome: UpsertOutcome | "rejected";
+      readonly run: IngestionRun;
+    }
+  | { readonly type: "run-completed"; readonly run: IngestionRun };
 
 export class IngestionConflictError extends Error {
   constructor() {
@@ -127,6 +147,10 @@ export class OrderWinIngestionService {
     if (!renewed) throw new IngestionLeaseLostError();
   }
 
+  private report(event: IngestionProgressEvent) {
+    this.options.onProgress?.(event);
+  }
+
   async ingest(input: {
     readonly from: Date;
     readonly to: Date;
@@ -148,6 +172,7 @@ export class OrderWinIngestionService {
         window: { from: input.from, to: input.to },
         startedAt,
       });
+      this.report({ type: "run-started", run });
       const symbols = await this.repository.getTrackedSymbols();
       const symbolAllowlist = new Set(symbols);
       let hasNext = true;
@@ -162,6 +187,13 @@ export class OrderWinIngestionService {
         });
         await this.renewLease(ownerId);
         run = { ...run, pagesFetched: run.pagesFetched + 1 };
+        this.report({
+          type: "page-fetched",
+          page,
+          rowCount: result.data.length,
+          hasNext: result.hasNext,
+          run,
+        });
 
         for (const announcement of result.data) {
           run = { ...run, recordsFetched: run.recordsFetched + 1 };
@@ -170,11 +202,27 @@ export class OrderWinIngestionService {
             !symbolAllowlist.has(announcement.symbol.trim().toUpperCase())
           ) {
             run = { ...run, recordsRejected: run.recordsRejected + 1 };
+            this.report({
+              type: "row-processed",
+              sourceAnnouncementId: announcement.id,
+              symbol: announcement.symbol.trim().toUpperCase(),
+              companyName: announcement.company_name ?? null,
+              outcome: "rejected",
+              run,
+            });
             continue;
           }
           const candidate = await normalizeAnnouncement(announcement);
           if (!candidate) {
             run = { ...run, recordsRejected: run.recordsRejected + 1 };
+            this.report({
+              type: "row-processed",
+              sourceAnnouncementId: announcement.id,
+              symbol: announcement.symbol.trim().toUpperCase(),
+              companyName: announcement.company_name ?? null,
+              outcome: "rejected",
+              run,
+            });
             continue;
           }
           const seenAt = this.now();
@@ -187,6 +235,14 @@ export class OrderWinIngestionService {
           if (outcome === "unchanged") {
             run = { ...run, recordsUnchanged: run.recordsUnchanged + 1 };
           }
+          this.report({
+            type: "row-processed",
+            sourceAnnouncementId: announcement.id,
+            symbol: candidate.symbol,
+            companyName: candidate.companyName,
+            outcome,
+            run,
+          });
         }
 
         hasNext = result.hasNext;
@@ -195,7 +251,9 @@ export class OrderWinIngestionService {
 
       if (hasNext) throw new Error(`Ingestion exceeded the ${this.options.maxPages} page limit`);
       run = { ...run, status: "succeeded", completedAt: this.now() };
-      return await this.repository.completeRun(run);
+      const completed = await this.repository.completeRun(run);
+      this.report({ type: "run-completed", run: completed });
+      return completed;
     } catch (error) {
       if (run) {
         run = {

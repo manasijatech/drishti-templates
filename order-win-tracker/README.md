@@ -1,6 +1,6 @@
 # Order Win Tracker
 
-Headless, strictly typed ingestion pipeline for Indian listed-company order-win announcements. It retrieves the Drishti announcement feed with the exact `Award/Receipt of Order` category, validates each response, and stores an idempotent projection in MongoDB.
+Strictly typed ingestion pipeline for Indian listed-company order-win announcements. It retrieves the Drishti announcement feed with the exact `Award/Receipt of Order` category, validates each response, and stores an idempotent projection in MongoDB. A small terminal UI shows the active ingestion stage, counters, and each row as it is stored.
 
 ## Current slice
 
@@ -9,9 +9,24 @@ Headless, strictly typed ingestion pipeline for Indian listed-company order-win 
 - MongoDB persistence through Mongoose
 - Unauthenticated manual ingestion and reads
 - Cursor-paginated order-win reads
+- Lightweight OpenTUI ingestion view
 - Append-only architecture decisions in `decision.md`
 
-No product UI, inferred contract values, scheduler, WebSocket consumer, or npm scaffolding CLI is included yet.
+No browser UI, inferred contract values, scheduler, WebSocket consumer, or npm scaffolding CLI is included yet.
+
+## Terminal UI
+
+With MongoDB running and the environment variables in `.env` configured, start one live ingestion:
+
+```bash
+bun run cli
+```
+
+The screen updates while pages are fetched and rows are inserted, updated, skipped as unchanged, or rejected. Press `q` to exit after the run. To preview the interface without MongoDB or an API key:
+
+```bash
+bun run cli:demo
+```
 
 ## Run with Docker
 
