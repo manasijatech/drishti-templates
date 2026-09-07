@@ -16,16 +16,24 @@ No browser UI, inferred contract values, scheduler, WebSocket consumer, or npm s
 
 ## Terminal UI
 
-With MongoDB running and the environment variables in `.env` configured, start one live ingestion:
+After configuring `.env`, start one live ingestion inside Docker so the CLI can use the bundled MongoDB service:
 
 ```bash
-bun run cli
+docker compose run --rm order-win-cli
 ```
 
-The screen updates while pages are fetched and rows are inserted, updated, skipped as unchanged, or rejected. Press `q` to exit after the run. To preview the interface without MongoDB or an API key:
+The screen updates while pages are fetched and rows are inserted, updated, skipped as unchanged, or rejected. Press `q` to exit after the run. The `MONGODB_URI` from `.env` uses the internal `order-win-mongodb` hostname and is shared by the API and CLI containers.
+
+To preview the interface without MongoDB or an API key:
 
 ```bash
 bun run cli:demo
+```
+
+You can also preview it using the built image without starting dependencies:
+
+```bash
+docker compose run --rm --no-deps order-win-cli bun run cli:demo
 ```
 
 ## Run with Docker
