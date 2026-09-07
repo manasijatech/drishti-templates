@@ -3,6 +3,7 @@ import {
   BoxRenderable,
   createCliRenderer,
   type KeyEvent,
+  ScrollBoxRenderable,
   TextAttributes,
   TextRenderable,
 } from "@opentui/core";
@@ -43,7 +44,7 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   openConsoleOnError: false,
   targetFps: 15,
-  useMouse: false,
+  useMouse: true,
 });
 
 let terminalWidth = process.stdout.columns ?? 90;
@@ -100,6 +101,29 @@ const rowsPanel = new BoxRenderable(renderer, {
   paddingX: 1,
   flexDirection: "column",
 });
+const headerText = new TextRenderable(renderer, {
+  id: "rows-header",
+  content: "",
+  fg: palette.dim,
+  attributes: TextAttributes.BOLD,
+  selectable: false,
+});
+const rowsScroll = new ScrollBoxRenderable(renderer, {
+  id: "rows-scroll",
+  width: "100%",
+  flexGrow: 1,
+  scrollY: true,
+  stickyScroll: true,
+  stickyStart: "top",
+  viewportCulling: false,
+  verticalScrollbarOptions: {
+    showArrows: true,
+    trackOptions: {
+      foregroundColor: palette.cyan,
+      backgroundColor: palette.background,
+    },
+  },
+});
 const rowsText = new TextRenderable(renderer, {
   id: "rows",
   content: "",
@@ -108,18 +132,21 @@ const rowsText = new TextRenderable(renderer, {
 });
 const footer = new TextRenderable(renderer, {
   id: "footer",
-  content: "q quit",
+  content: "",
   fg: palette.dim,
 });
 
 statusPanel.add(statusText);
 statusPanel.add(countsText);
-rowsPanel.add(rowsText);
+rowsScroll.add(rowsText);
+rowsPanel.add(headerText);
+rowsPanel.add(rowsScroll);
 root.add(title);
 root.add(statusPanel);
 root.add(rowsPanel);
 root.add(footer);
 renderer.root.add(root);
+rowsScroll.focus();
 
 function clip(value: string, width: number) {
   if (width <= 0) return "";
@@ -144,7 +171,6 @@ function render() {
     `${counts.inserted} new  ·  ${counts.updated} updated  ·  ${counts.unchanged} unchanged  ·  ${counts.rejected} rejected`,
   ].join("\n");
 
-  const visibleRows = Math.max(2, terminalHeight - 13);
   const header = tableLine({
     id: "header",
     when: "WHEN",
@@ -152,9 +178,19 @@ function render() {
     symbol: "SYMBOL",
     company: "COMPANY",
   });
-  const body = rows.length > 0 ? rows.slice(0, visibleRows).map(tableLine) : ["Waiting for rows…"];
   const separatorWidth = Math.max(1, Math.min(terminalWidth - 6, 110));
-  rowsText.content = [header, "-".repeat(separatorWidth), ...body].join("\n");
+  headerText.content = [header, "-".repeat(separatorWidth)].join("\n");
+  rowsText.content = rows.length > 0 ? rows.map(tableLine).join("\n") : "Waiting for rows…";
+  renderFooter();
+}
+
+function renderFooter() {
+  const visibleRows = Math.max(1, terminalHeight - 15);
+  const totalRows = rows.length;
+  const firstVisible =
+    totalRows === 0 ? 0 : Math.min(totalRows, Math.floor(rowsScroll.scrollTop) + 1);
+  const lastVisible = Math.min(totalRows, firstVisible + visibleRows - 1);
+  footer.content = `↑↓/wheel move  ·  PgUp/PgDn  ·  Home/End  ·  ${firstVisible}-${lastVisible} of ${totalRows}  ·  q quit`;
 }
 
 function liveTime() {
@@ -229,6 +265,9 @@ async function shutdown(exitCode = 0) {
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (key.name === "q" || (key.ctrl && key.name === "c")) void shutdown();
+  if (key.name === "j") rowsScroll.scrollBy(1);
+  if (key.name === "k") rowsScroll.scrollBy(-1);
+  queueMicrotask(renderFooter);
 });
 
 function required(name: "MONGODB_URI" | "DRISHTI_API_KEY") {

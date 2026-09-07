@@ -22,7 +22,7 @@ After configuring `.env`, start one live ingestion inside Docker so the CLI can 
 docker compose run --rm order-win-cli
 ```
 
-The screen first loads existing order wins from MongoDB with a `stored` status. It then updates those rows—or adds new ones—as pages are fetched and announcements are inserted, updated, unchanged, or rejected. Press `q` to exit after the run. The `MONGODB_URI` from `.env` uses the internal `order-win-mongodb` hostname and is shared by the API and CLI containers.
+The screen first loads existing order wins from MongoDB with a `stored` status. It then updates those rows—or adds new ones—as pages are fetched and announcements are inserted, updated, unchanged, or rejected. Move through the table with the arrow keys, `j`/`k`, Page Up/Page Down, Home/End, or the mouse wheel. Press `q` to exit after the run. The `MONGODB_URI` from `.env` uses the internal `order-win-mongodb` hostname and is shared by the API and CLI containers.
 
 To preview the interface without MongoDB or an API key:
 
