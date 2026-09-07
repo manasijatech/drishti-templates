@@ -1,0 +1,28 @@
+{
+  "name": "@order-win/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "dev": "bun --watch src/index.ts",
+    "lint": "biome check src",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "0.9.1",
+    "@order-win/contracts": "workspace:*",
+    "@order-win/core": "workspace:*",
+    "@order-win/database": "workspace:*",
+    "@order-win/drishti": "workspace:*",
+    "@scalar/hono-api-reference": "0.12.0",
+    "dotenv": "17.2.2",
+    "hono": "4.13.7",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.5",
+    "@types/bun": "1.2.22",
+    "typescript": "5.8.3"
+  }
+}

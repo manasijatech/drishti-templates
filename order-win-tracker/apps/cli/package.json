@@ -1,0 +1,24 @@
+{
+  "name": "@order-win/cli",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "demo": "bun src/index.ts --demo",
+    "lint": "biome check src",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opentui/core": "0.5.10",
+    "@order-win/core": "workspace:*",
+    "@order-win/database": "workspace:*",
+    "@order-win/drishti": "workspace:*",
+    "dotenv": "17.2.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.5",
+    "@types/bun": "1.2.22",
+    "typescript": "5.8.3"
+  }
+}
