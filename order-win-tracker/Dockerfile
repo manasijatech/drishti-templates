@@ -1,7 +1,8 @@
-FROM oven/bun:1.2.22-alpine AS dependencies
+FROM oven/bun:1.2.22-slim AS dependencies
 WORKDIR /app
 COPY package.json bun.lock turbo.json tsconfig.base.json biome.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY apps/cli/package.json apps/cli/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/database/package.json packages/database/package.json

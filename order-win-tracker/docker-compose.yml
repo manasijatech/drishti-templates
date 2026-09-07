@@ -5,7 +5,7 @@ services:
     environment:
       API_PORT: 3000
       API_HOST: 0.0.0.0
-      MONGODB_URI: mongodb://order-win-mongodb:27017/order_win_tracker?replicaSet=rs0
+      MONGODB_URI: ${MONGODB_URI:-mongodb://order-win-mongodb:27017/order_win_tracker?replicaSet=rs0}
       DRISHTI_API_KEY: ${DRISHTI_API_KEY}
       DRISHTI_BASE_URL: ${DRISHTI_BASE_URL:-https://developers.manasija.in}
       DRISHTI_TIMEOUT_MS: ${DRISHTI_TIMEOUT_MS:-30000}
@@ -20,6 +20,25 @@ services:
       order-win-mongodb-init:
         condition: service_completed_successfully
     restart: unless-stopped
+
+  order-win-cli:
+    profiles: ["cli"]
+    build:
+      context: .
+    command: ["bun", "run", "cli"]
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://order-win-mongodb:27017/order_win_tracker?replicaSet=rs0}
+      DRISHTI_API_KEY: ${DRISHTI_API_KEY}
+      DRISHTI_BASE_URL: ${DRISHTI_BASE_URL:-https://developers.manasija.in}
+      DRISHTI_TIMEOUT_MS: ${DRISHTI_TIMEOUT_MS:-30000}
+      INGESTION_LOOKBACK_MINUTES: ${INGESTION_LOOKBACK_MINUTES:-15}
+      INGESTION_PAGE_SIZE: ${INGESTION_PAGE_SIZE:-50}
+      INGESTION_MAX_PAGES: ${INGESTION_MAX_PAGES:-100}
+    depends_on:
+      order-win-mongodb-init:
+        condition: service_completed_successfully
+    stdin_open: true
+    tty: true
 
   order-win-mongodb:
     image: mongo:7.0
