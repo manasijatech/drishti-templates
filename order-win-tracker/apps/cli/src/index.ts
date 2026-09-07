@@ -11,7 +11,8 @@ import { connectMongoose, MongoOrderWinRepository } from "@order-win/database";
 import { createDrishtiAnnouncementSource } from "@order-win/drishti";
 
 type Row = {
-  readonly time: string;
+  readonly id: string;
+  readonly when: string;
   readonly outcome: string;
   readonly symbol: string;
   readonly company: string;
@@ -51,6 +52,7 @@ let stage = "Starting";
 let active = true;
 let failed = false;
 let page = 0;
+let storedCount = 0;
 let counts: Counts = { fetched: 0, inserted: 0, updated: 0, unchanged: 0, rejected: 0 };
 const rows: Row[] = [];
 const spinner = ["|", "/", "-", "\\"];
@@ -128,8 +130,8 @@ function clip(value: string, width: number) {
 
 function tableLine(row: Row) {
   const innerWidth = Math.max(48, terminalWidth - 6);
-  const companyWidth = Math.max(14, innerWidth - 38);
-  return `${clip(row.time, 8)}  ${clip(row.outcome, 10)}  ${clip(row.symbol, 12)}  ${clip(row.company, companyWidth)}`;
+  const companyWidth = Math.max(14, innerWidth - 41);
+  return `${clip(row.when, 11)}  ${clip(row.outcome, 10)}  ${clip(row.symbol, 12)}  ${clip(row.company, companyWidth)}`;
 }
 
 function render() {
@@ -138,16 +140,14 @@ function render() {
   statusText.content = `${indicator} ${stage}${pageLabel}`;
   statusText.fg = failed ? palette.yellow : active ? palette.cyan : palette.green;
   countsText.content = [
-    `${counts.fetched} fetched`,
-    `${counts.inserted} new`,
-    `${counts.updated} updated`,
-    `${counts.unchanged} unchanged`,
-    `${counts.rejected} rejected`,
-  ].join("  ·  ");
+    `${storedCount} stored  ·  ${counts.fetched} fetched`,
+    `${counts.inserted} new  ·  ${counts.updated} updated  ·  ${counts.unchanged} unchanged  ·  ${counts.rejected} rejected`,
+  ].join("\n");
 
   const visibleRows = Math.max(2, terminalHeight - 13);
   const header = tableLine({
-    time: "TIME",
+    id: "header",
+    when: "WHEN",
     outcome: "RESULT",
     symbol: "SYMBOL",
     company: "COMPANY",
@@ -157,8 +157,19 @@ function render() {
   rowsText.content = [header, "-".repeat(separatorWidth), ...body].join("\n");
 }
 
-function addRow(row: Omit<Row, "time">) {
-  rows.unshift({ ...row, time: new Date().toLocaleTimeString("en-GB", { hour12: false }) });
+function liveTime() {
+  return new Date().toLocaleTimeString("en-GB", { hour12: false });
+}
+
+function storedTime(value: Date | null) {
+  if (!value) return "-";
+  return value.toISOString().slice(5, 16).replace("T", " ");
+}
+
+function upsertRow(row: Row) {
+  const existingIndex = rows.findIndex((existing) => existing.id === row.id);
+  if (existingIndex >= 0) rows.splice(existingIndex, 1);
+  rows.unshift(row);
   render();
 }
 
@@ -173,11 +184,15 @@ function handleProgress(event: IngestionProgressEvent) {
   if (event.type === "run-started") stage = "Reading tracked symbols";
   if (event.type === "page-fetched") {
     page = event.page;
-    stage = `Processing ${event.rowCount} rows`;
+    stage = `Processing ${event.rowCount} ${event.rowCount === 1 ? "row" : "rows"}`;
   }
   if (event.type === "row-processed") {
     stage = "Saving announcements";
-    addRow({
+    const exists = rows.some((row) => row.id === event.sourceAnnouncementId);
+    if (!exists && event.outcome !== "rejected") storedCount += 1;
+    upsertRow({
+      id: event.sourceAnnouncementId,
+      when: liveTime(),
       outcome: event.outcome,
       symbol: event.symbol,
       company: event.companyName ?? "-",
@@ -236,7 +251,29 @@ async function runLive() {
   stage = "Connecting to MongoDB";
   render();
   connection = await connectMongoose(mongodbUri);
-  stage = "Connected · requesting Drishti";
+  const repository = new MongoOrderWinRepository(connection);
+  stage = "Loading stored order wins";
+  render();
+
+  let cursor: string | null = null;
+  do {
+    const result = await repository.list({ limit: 100, ...(cursor ? { cursor } : {}) });
+    for (const orderWin of result.items) {
+      rows.push({
+        id: orderWin.sourceAnnouncementId,
+        when: storedTime(orderWin.announcedAt),
+        outcome: "stored",
+        symbol: orderWin.symbol,
+        company: orderWin.companyName ?? "-",
+      });
+    }
+    cursor = result.nextCursor;
+    storedCount = rows.length;
+    stage = `Loaded ${storedCount} stored order wins`;
+    render();
+  } while (cursor);
+
+  stage = "Requesting Drishti";
   render();
 
   const lookbackMinutes = integer("INGESTION_LOOKBACK_MINUTES", 15);
@@ -248,7 +285,7 @@ async function runLive() {
       baseUrl: process.env.DRISHTI_BASE_URL ?? "https://developers.manasija.in",
       timeoutMs: integer("DRISHTI_TIMEOUT_MS", 30_000),
     }),
-    new MongoOrderWinRepository(connection),
+    repository,
     {
       pageSize: integer("INGESTION_PAGE_SIZE", 50),
       maxPages: integer("INGESTION_MAX_PAGES", 100),
@@ -260,11 +297,52 @@ async function runLive() {
 }
 
 async function runDemo() {
+  rows.push(
+    {
+      id: "announcement-bel",
+      when: "09-07 09:15",
+      symbol: "BEL",
+      company: "Bharat Electronics",
+      outcome: "stored",
+    },
+    {
+      id: "announcement-rvnl",
+      when: "09-06 16:40",
+      symbol: "RVNL",
+      company: "Rail Vikas Nigam",
+      outcome: "stored",
+    },
+  );
+  storedCount = rows.length;
+  stage = `Loaded ${storedCount} stored order wins`;
+  render();
+  await Bun.sleep(350);
+
   const demoRows = [
-    { symbol: "TCS", company: "Tata Consultancy Services", outcome: "inserted" },
-    { symbol: "LT", company: "Larsen & Toubro", outcome: "inserted" },
-    { symbol: "BEL", company: "Bharat Electronics", outcome: "unchanged" },
-    { symbol: "RVNL", company: "Rail Vikas Nigam", outcome: "updated" },
+    {
+      id: "announcement-tcs",
+      symbol: "TCS",
+      company: "Tata Consultancy Services",
+      outcome: "inserted",
+    },
+    {
+      id: "announcement-bel",
+      symbol: "BEL",
+      company: "Bharat Electronics",
+      outcome: "unchanged",
+    },
+    {
+      id: "announcement-rvnl",
+      symbol: "RVNL",
+      company: "Rail Vikas Nigam",
+      outcome: "updated",
+    },
+    {
+      id: "announcement-lt",
+      symbol: "LT",
+      company: "Larsen & Toubro",
+      outcome: "inserted",
+    },
   ];
   page = 1;
   stage = "Fetching Drishti announcements";
@@ -278,8 +356,9 @@ async function runDemo() {
       updated: counts.updated + (row.outcome === "updated" ? 1 : 0),
       unchanged: counts.unchanged + (row.outcome === "unchanged" ? 1 : 0),
     };
+    if (!rows.some((existing) => existing.id === row.id)) storedCount += 1;
     stage = "Saving announcements";
-    addRow(row);
+    upsertRow({ ...row, when: liveTime() });
   }
   active = false;
   stage = "Demo complete";
