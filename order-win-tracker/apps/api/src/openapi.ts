@@ -16,30 +16,47 @@ export const openApiDocument = {
   servers: [{ url: "/", description: "Current server" }],
   paths: {
     "/health/live": {
-      get: { summary: "Liveness check", responses: { "200": { description: "Live" } } },
+      get: {
+        summary: "Check whether the API process is alive",
+        description:
+          "Returns immediately when the HTTP process is running. This check does not verify MongoDB or Drishti connectivity and is intended for container liveness probes.",
+        responses: { "200": { description: "The API process is running" } },
+      },
     },
     "/health/ready": {
       get: {
-        summary: "Readiness check",
+        summary: "Check whether the API is ready to serve requests",
+        description:
+          "Reports whether the API has an active MongoDB connection. Use this endpoint for readiness probes before routing traffic to the service.",
         responses: {
-          "200": { description: "Ready" },
-          "503": { description: "Not ready" },
+          "200": { description: "MongoDB is connected and the API is ready" },
+          "503": { description: "MongoDB is not connected and the API is not ready" },
         },
       },
     },
     "/api/v1/order-wins": {
       get: {
-        summary: "List order wins",
+        summary: "List stored order-win announcements",
+        description:
+          "Returns order-win announcements already stored in MongoDB, newest first. Results use cursor pagination and can optionally be limited to one market symbol. This endpoint does not call Drishti.",
         parameters: [
-          { name: "symbol", in: "query", schema: { type: "string", minLength: 1 } },
+          {
+            name: "symbol",
+            in: "query",
+            description: "Return only records for this symbol. Matching is case-insensitive.",
+            schema: { type: "string", minLength: 1 },
+          },
           {
             name: "cursor",
             in: "query",
+            description:
+              "Opaque `nextCursor` from the previous response. Omit it to read the first page.",
             schema: { type: "string", pattern: "^[a-fA-F0-9]{24}$" },
           },
           {
             name: "limit",
             in: "query",
+            description: "Maximum records to return. Defaults to 25 and cannot exceed 100.",
             schema: { type: "integer", minimum: 1, maximum: 100, default: 25 },
           },
         ],
@@ -55,17 +72,30 @@ export const openApiDocument = {
     },
     "/api/v1/order-win-ingestions": {
       post: {
-        summary: "Ingest order wins",
+        summary: "Fetch and store order-win announcements",
+        description:
+          "Runs a synchronous ingestion from Drishti for the requested UTC window. The current tracking configuration limits upstream results when symbols are configured; all-market mode requests every symbol. Records are inserted, updated, or marked unchanged idempotently, and the response contains run counters. Only one ingestion can run at a time.",
         requestBody: {
           required: true,
+          description:
+            "Optional UTC date-time bounds. If omitted, `to` is now and `from` uses the configured lookback period.",
           content: {
             "application/json": {
               schema: {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                  from: { type: "string", format: "date-time" },
-                  to: { type: "string", format: "date-time" },
+                  from: {
+                    type: "string",
+                    format: "date-time",
+                    description:
+                      "Inclusive start of the ingestion window in an offset-aware format.",
+                  },
+                  to: {
+                    type: "string",
+                    format: "date-time",
+                    description: "Inclusive end of the ingestion window in an offset-aware format.",
+                  },
                 },
               },
             },
@@ -86,9 +116,17 @@ export const openApiDocument = {
     },
     "/api/v1/ingestion-runs/{id}": {
       get: {
-        summary: "Get an ingestion run",
+        summary: "Get one ingestion run",
+        description:
+          "Returns the persisted status, requested window, processing counters, timestamps, and public error details for a previous ingestion run.",
         parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", minLength: 1 } },
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "MongoDB identifier returned by the ingestion endpoint.",
+            schema: { type: "string", minLength: 1 },
+          },
         ],
         responses: {
           "200": jsonResponse(
@@ -102,7 +140,9 @@ export const openApiDocument = {
     },
     "/api/v1/tracking-configurations/current": {
       get: {
-        summary: "Get tracking configuration",
+        summary: "Get the current symbol tracking configuration",
+        description:
+          "Returns the singleton configuration used by future ingestion runs. `mode: all` with an empty `symbols` array is the default and means the entire market is tracked.",
         responses: {
           "200": jsonResponse(
             { $ref: "#/components/schemas/TrackingConfigurationResponse" },
@@ -112,11 +152,12 @@ export const openApiDocument = {
         },
       },
       put: {
-        summary: "Replace tracked symbols",
+        summary: "Replace the current tracked-symbol list",
         description:
-          "Symbols are normalized and deduplicated. Send an empty array to track the whole market.",
+          "Atomically replaces the singleton symbol configuration used by future ingestion runs. Symbols are trimmed, uppercased, deduplicated, and sorted. Send an empty array to restore all-market mode. Existing stored order wins are not deleted.",
         requestBody: {
           required: true,
+          description: "The complete replacement list, not a partial update.",
           content: {
             "application/json": {
               schema: {
@@ -127,6 +168,8 @@ export const openApiDocument = {
                   symbols: {
                     type: "array",
                     maxItems: 500,
+                    description:
+                      "Market symbols to track. An empty list means all symbols in the market.",
                     items: { type: "string", minLength: 1, maxLength: 64 },
                   },
                 },
