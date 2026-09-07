@@ -1,0 +1,24 @@
+{
+  "name": "@order-win/database",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "biome check src",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@order-win/contracts": "workspace:*",
+    "@order-win/core": "workspace:*",
+    "mongoose": "8.18.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.5",
+    "@types/bun": "1.2.22",
+    "typescript": "5.8.3"
+  }
+}

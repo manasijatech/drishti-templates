@@ -1,0 +1,23 @@
+{
+  "name": "@order-win/drishti",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "biome check src",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@order-win/contracts": "workspace:*",
+    "@order-win/core": "workspace:*",
+    "drishti-sdk": "1.0.15"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.5",
+    "typescript": "5.8.3"
+  }
+}

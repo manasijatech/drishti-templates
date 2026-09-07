@@ -1,0 +1,54 @@
+services:
+  order-win-api:
+    build:
+      context: .
+    environment:
+      API_PORT: 3000
+      API_HOST: 0.0.0.0
+      MONGODB_URI: mongodb://order-win-mongodb:27017/order_win_tracker?replicaSet=rs0
+      DRISHTI_API_KEY: ${DRISHTI_API_KEY}
+      DRISHTI_BASE_URL: ${DRISHTI_BASE_URL:-https://developers.manasija.in}
+      DRISHTI_TIMEOUT_MS: ${DRISHTI_TIMEOUT_MS:-30000}
+      API_RATE_LIMIT_WINDOW_SECONDS: ${API_RATE_LIMIT_WINDOW_SECONDS:-60}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-60}
+      INGESTION_LOOKBACK_MINUTES: ${INGESTION_LOOKBACK_MINUTES:-15}
+      INGESTION_PAGE_SIZE: ${INGESTION_PAGE_SIZE:-50}
+      INGESTION_MAX_PAGES: ${INGESTION_MAX_PAGES:-100}
+    ports:
+      - "127.0.0.1:${API_PORT:-3000}:3000"
+    depends_on:
+      order-win-mongodb-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  order-win-mongodb:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - order-win-mongodb-data:/data/db
+    restart: unless-stopped
+
+  order-win-mongodb-init:
+    image: mongo:7.0
+    depends_on:
+      order-win-mongodb:
+        condition: service_healthy
+    command:
+      - mongosh
+      - --host
+      - order-win-mongodb:27017
+      - --quiet
+      - --eval
+      - >-
+        try { rs.status() } catch (error) {
+          rs.initiate({_id: "rs0", members: [{_id: 0, host: "order-win-mongodb:27017"}]})
+        }
+    restart: "no"
+
+volumes:
+  order-win-mongodb-data:
