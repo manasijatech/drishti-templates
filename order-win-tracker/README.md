@@ -29,6 +29,26 @@ The API listens on `http://localhost:3000` by default.
 Docker Compose initializes MongoDB as a single-node replica set for lease-fenced projection transactions.
 The published API port binds to loopback only. The API has no application authentication; keep it private or add authentication at a TLS reverse proxy before exposing it beyond the host.
 
+Open `http://localhost:3000/docs` for Scalar's interactive API client. The OpenAPI document is available at `http://localhost:3000/openapi.json`.
+
+## Configure tracked symbols
+
+The default configuration tracks the whole market:
+
+```bash
+curl http://localhost:3000/api/v1/tracking-configurations/current
+```
+
+Replace it with a symbol allowlist for future ingestion runs:
+
+```bash
+curl -X PUT http://localhost:3000/api/v1/tracking-configurations/current \
+  -H "Content-Type: application/json" \
+  -d '{"symbols":["TCS","RELIANCE"]}'
+```
+
+Symbols are trimmed, uppercased, deduplicated, and sorted. Send `{"symbols":[]}` to return to all-market mode. Existing stored order wins are retained when the configuration changes.
+
 ## Ingest order wins
 
 Use the configured lookback window:

@@ -9,6 +9,7 @@ export type AnnouncementsRequest = {
   readonly to?: string;
   readonly page?: number;
   readonly limit?: number;
+  readonly symbols?: string[];
 };
 
 export type AnnouncementsClient = {
@@ -38,6 +39,7 @@ export class DrishtiAnnouncementSource implements AnnouncementSource {
         to: request.to.toISOString(),
         page: request.page,
         limit: request.limit,
+        ...(request.symbols ? { symbols: [...request.symbols] } : {}),
       });
       const parsed = drishtiAnnouncementPageSchema.parse(response);
       return { data: parsed.data, hasNext: parsed.has_next };

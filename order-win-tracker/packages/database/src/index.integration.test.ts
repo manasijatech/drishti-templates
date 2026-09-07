@@ -15,6 +15,13 @@ if (!testMongoUri) {
       const repository = new MongoOrderWinRepository(connection);
       const now = new Date("2026-09-07T10:00:00Z");
 
+      expect(await repository.getTrackedSymbols()).toEqual([]);
+      expect(await repository.setTrackedSymbols(["TCS", "RELIANCE"], now)).toEqual([
+        "TCS",
+        "RELIANCE",
+      ]);
+      expect(await repository.getTrackedSymbols()).toEqual(["TCS", "RELIANCE"]);
+
       expect(await repository.acquireIngestionLock("owner-1", 60_000)).toBe(true);
       expect(await repository.acquireIngestionLock("owner-2", 60_000)).toBe(false);
       const candidate: OrderWinCandidate = {

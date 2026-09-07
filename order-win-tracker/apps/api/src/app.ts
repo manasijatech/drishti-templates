@@ -4,15 +4,19 @@ import {
   listOrderWinsQuerySchema,
   toIngestionRunDto,
   toOrderWinDto,
+  toTrackingConfigurationDto,
+  updateTrackingConfigurationSchema,
 } from "@order-win/contracts";
 import { IngestionConflictError, OrderWinIngestionService } from "@order-win/core";
 import { MongoOrderWinRepository } from "@order-win/database";
 import { createDrishtiAnnouncementSource, DrishtiSourceError } from "@order-win/drishti";
+import { apiReference } from "@scalar/hono-api-reference";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type mongoose from "mongoose";
 import { z } from "zod";
 import type { AppConfig } from "./config";
+import { openApiDocument } from "./openapi";
 
 type Dependencies = {
   readonly config: AppConfig;
@@ -41,6 +45,8 @@ export function createApp(dependencies: Dependencies) {
   let apiRateLimit = { count: 0, resetAt: 0 };
 
   app.get("/health/live", (context) => context.json({ data: { status: "ok" } }));
+  app.get("/openapi.json", (context) => context.json(openApiDocument));
+  app.get("/docs", apiReference({ url: "/openapi.json", pageTitle: "Order Win Tracker API" }));
   app.get("/health/ready", async (context) => {
     const ready = dependencies.mongooseConnection.readyState === 1;
     return context.json({ data: { status: ready ? "ready" : "not_ready" } }, ready ? 200 : 503);
@@ -58,17 +64,50 @@ export function createApp(dependencies: Dependencies) {
     return await next();
   });
 
-  app.get("/api/v1/order-wins", zValidator("query", listOrderWinsQuerySchema), async (context) => {
-    const result = await repository.list(context.req.valid("query"));
-    return context.json({
-      data: result.items.map(toOrderWinDto),
-      meta: { nextCursor: result.nextCursor },
-    });
+  app.get(
+    "/api/v1/order-wins",
+    zValidator("query", listOrderWinsQuerySchema, (result, context) => {
+      if (!result.success)
+        return context.json(apiError("VALIDATION_ERROR", "Request validation failed"), 400);
+      return undefined;
+    }),
+    async (context) => {
+      const result = await repository.list(context.req.valid("query"));
+      return context.json({
+        data: result.items.map(toOrderWinDto),
+        meta: { nextCursor: result.nextCursor },
+      });
+    },
+  );
+
+  app.get("/api/v1/tracking-configurations/current", async (context) => {
+    const symbols = await repository.getTrackedSymbols();
+    return context.json({ data: toTrackingConfigurationDto(symbols) });
   });
+
+  app.put(
+    "/api/v1/tracking-configurations/current",
+    zValidator("json", updateTrackingConfigurationSchema, (result, context) => {
+      if (!result.success)
+        return context.json(apiError("VALIDATION_ERROR", "Request validation failed"), 400);
+      return undefined;
+    }),
+    async (context) => {
+      const symbols = await repository.setTrackedSymbols(
+        context.req.valid("json").symbols,
+        new Date(),
+      );
+      return context.json({ data: toTrackingConfigurationDto(symbols) });
+    },
+  );
 
   app.post(
     "/api/v1/order-win-ingestions",
-    zValidator("json", createIngestionSchema),
+    zValidator("json", createIngestionSchema, (result, context) => {
+      if (!result.success)
+        return context.json(apiError("VALIDATION_ERROR", "Request validation failed"), 400);
+      return undefined;
+    }),
     async (context) => {
       const body = context.req.valid("json");
       const to = body.to ? new Date(body.to) : new Date();
@@ -91,7 +130,11 @@ export function createApp(dependencies: Dependencies) {
 
   app.get(
     "/api/v1/ingestion-runs/:id",
-    zValidator("param", z.object({ id: z.string().min(1) })),
+    zValidator("param", z.object({ id: z.string().min(1) }), (result, context) => {
+      if (!result.success)
+        return context.json(apiError("VALIDATION_ERROR", "Request validation failed"), 400);
+      return undefined;
+    }),
     async (context) => {
       const run = await repository.findRun(context.req.valid("param").id);
       if (!run) return context.json(apiError("NOT_FOUND", "Ingestion run not found"), 404);

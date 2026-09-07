@@ -42,6 +42,7 @@ class FakeRepository implements OrderWinRepository {
   released = false;
   renewals = 0;
   readonly candidates: OrderWinCandidate[] = [];
+  trackedSymbols: readonly string[] = [];
 
   async acquireIngestionLock() {
     return this.lockAvailable;
@@ -99,6 +100,15 @@ class FakeRepository implements OrderWinRepository {
   async findRun(): Promise<IngestionRun | null> {
     return null;
   }
+
+  async getTrackedSymbols() {
+    return this.trackedSymbols;
+  }
+
+  async setTrackedSymbols(symbols: readonly string[]) {
+    this.trackedSymbols = symbols;
+    return symbols;
+  }
 }
 
 describe("OrderWinIngestionService", () => {
@@ -136,6 +146,46 @@ describe("OrderWinIngestionService", () => {
     expect(run.recordsUnchanged).toBe(1);
     expect(repository.released).toBe(true);
     expect(repository.renewals).toBe(2);
+  });
+
+  test("passes configured symbols to every source page", async () => {
+    const source = new FakeSource();
+    const repository = new FakeRepository();
+    repository.trackedSymbols = ["TCS", "RELIANCE"];
+    const service = new OrderWinIngestionService(source, repository, {
+      pageSize: 50,
+      maxPages: 10,
+      lockDurationMs: 60_000,
+    });
+
+    await service.ingest({
+      from: new Date("2026-09-06T10:00:00Z"),
+      to: new Date("2026-09-07T10:00:00Z"),
+      trigger: "manual",
+    });
+
+    expect(source.requests.every((request) => request.symbols === repository.trackedSymbols)).toBe(
+      true,
+    );
+  });
+
+  test("rejects source rows outside the configured symbol allowlist", async () => {
+    const repository = new FakeRepository();
+    repository.trackedSymbols = ["TCS"];
+    const service = new OrderWinIngestionService(new FakeSource(), repository, {
+      pageSize: 50,
+      maxPages: 10,
+      lockDurationMs: 60_000,
+    });
+
+    const run = await service.ingest({
+      from: new Date("2026-09-06T10:00:00Z"),
+      to: new Date("2026-09-07T10:00:00Z"),
+      trigger: "manual",
+    });
+
+    expect(run.recordsRejected).toBe(2);
+    expect(repository.candidates).toHaveLength(0);
   });
 
   test("rejects rows outside the exact order-win category", async () => {

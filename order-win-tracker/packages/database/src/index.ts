@@ -77,6 +77,15 @@ const ingestionLockSchema = new Schema(
   { collection: "ingestion_locks", strict: "throw", versionKey: false },
 );
 
+const trackingConfigurationSchema = new Schema(
+  {
+    _id: { type: String, required: true },
+    symbols: { type: [String], required: true, default: [] },
+    updatedAt: { type: Date, required: true },
+  },
+  { collection: "tracking_configurations", strict: "throw", versionKey: false },
+);
+
 function toOrderWin(document: OrderWinDocument): OrderWin {
   return orderWinSchema.parse({ ...document, id: document._id.toHexString() });
 }
@@ -98,12 +107,21 @@ export class MongoOrderWinRepository implements OrderWinRepository {
     ownerId: string;
     expiresAt: Date;
   }>;
+  private readonly trackingConfigurations: Model<{
+    _id: string;
+    symbols: string[];
+    updatedAt: Date;
+  }>;
 
   constructor(connection: mongoose.Connection) {
     this.connection = connection;
     this.orderWins = connection.model("OrderWin", orderWinMongooseSchema);
     this.ingestionRuns = connection.model("IngestionRun", ingestionRunMongooseSchema);
     this.ingestionLocks = connection.model("IngestionLock", ingestionLockSchema);
+    this.trackingConfigurations = connection.model(
+      "TrackingConfiguration",
+      trackingConfigurationSchema,
+    );
   }
 
   async acquireIngestionLock(ownerId: string, durationMs: number) {
@@ -294,6 +312,23 @@ export class MongoOrderWinRepository implements OrderWinRepository {
     if (!mongoose.isValidObjectId(id)) return null;
     const document = await this.ingestionRuns.findById(id).lean();
     return document ? toIngestionRun(document) : null;
+  }
+
+  async getTrackedSymbols() {
+    const configuration = await this.trackingConfigurations.findById("current").lean();
+    return configuration?.symbols ?? [];
+  }
+
+  async setTrackedSymbols(symbols: readonly string[], updatedAt: Date) {
+    const configuration = await this.trackingConfigurations
+      .findByIdAndUpdate(
+        "current",
+        { $set: { symbols: [...symbols], updatedAt } },
+        { upsert: true, new: true },
+      )
+      .lean();
+    if (!configuration) throw new Error("Tracking configuration disappeared during update");
+    return configuration.symbols;
   }
 }
 

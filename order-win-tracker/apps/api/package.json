@@ -15,6 +15,7 @@
     "@order-win/core": "workspace:*",
     "@order-win/database": "workspace:*",
     "@order-win/drishti": "workspace:*",
+    "@scalar/hono-api-reference": "0.12.0",
     "dotenv": "17.2.2",
     "hono": "4.13.7",
     "zod": "4.5.4"

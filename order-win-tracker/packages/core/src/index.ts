@@ -12,6 +12,7 @@ export type AnnouncementPageRequest = {
   readonly to: Date;
   readonly page: number;
   readonly limit: number;
+  readonly symbols?: readonly string[];
 };
 
 export type AnnouncementPage = {
@@ -46,6 +47,8 @@ export interface OrderWinRepository {
     readonly nextCursor: string | null;
   }>;
   findRun(id: string): Promise<IngestionRun | null>;
+  getTrackedSymbols(): Promise<readonly string[]>;
+  setTrackedSymbols(symbols: readonly string[], updatedAt: Date): Promise<readonly string[]>;
 }
 
 export type IngestionOptions = {
@@ -145,6 +148,8 @@ export class OrderWinIngestionService {
         window: { from: input.from, to: input.to },
         startedAt,
       });
+      const symbols = await this.repository.getTrackedSymbols();
+      const symbolAllowlist = new Set(symbols);
       let hasNext = true;
       let page = 1;
       while (hasNext && page <= this.options.maxPages) {
@@ -153,12 +158,20 @@ export class OrderWinIngestionService {
           to: input.to,
           page,
           limit: this.options.pageSize,
+          ...(symbols.length > 0 ? { symbols } : {}),
         });
         await this.renewLease(ownerId);
         run = { ...run, pagesFetched: run.pagesFetched + 1 };
 
         for (const announcement of result.data) {
           run = { ...run, recordsFetched: run.recordsFetched + 1 };
+          if (
+            symbolAllowlist.size > 0 &&
+            !symbolAllowlist.has(announcement.symbol.trim().toUpperCase())
+          ) {
+            run = { ...run, recordsRejected: run.recordsRejected + 1 };
+            continue;
+          }
           const candidate = await normalizeAnnouncement(announcement);
           if (!candidate) {
             run = { ...run, recordsRejected: run.recordsRejected + 1 };

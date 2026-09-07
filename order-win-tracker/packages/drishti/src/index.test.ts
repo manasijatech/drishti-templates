@@ -25,6 +25,7 @@ describe("DrishtiAnnouncementSource", () => {
       to: new Date("2026-09-07T23:59:59Z"),
       page: 2,
       limit: 50,
+      symbols: ["TCS"],
     });
 
     expect(request).toEqual({
@@ -34,6 +35,7 @@ describe("DrishtiAnnouncementSource", () => {
       to: "2026-09-07T23:59:59.000Z",
       page: 2,
       limit: 50,
+      symbols: ["TCS"],
     });
     expect(page.data[0]?.symbol).toBe("TCS");
     expect(page.hasNext).toBe(false);

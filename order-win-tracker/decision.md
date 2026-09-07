@@ -243,3 +243,25 @@ This file is append-only. If a decision changes, add a new entry that references
 - Alternatives considered: Require synchronized host clocks; rejected because correctness should not depend on external clock discipline.
 - Consequences: Every lease lifecycle transition now uses MongoDB server time.
 - Supersedes: D-014's application-time initial acquisition behavior.
+
+## D-023: Persist one global symbol tracking configuration
+
+- Date: 2026-09-07
+- Status: Accepted
+- Context: Users need to limit tracking to selected market symbols, while the unauthenticated template has no per-user identity or ownership model.
+- Decision: Store one singleton tracking configuration. An empty symbol list means all-market; a non-empty normalized list is passed to every Drishti page in subsequent ingestion runs. Expose idempotent `GET` and `PUT` operations at `/api/v1/tracking-configurations/current`.
+- Reasons: The singleton makes unauthenticated semantics explicit, preserves all-market as the zero-configuration default, and avoids pretending configuration is user-scoped.
+- Alternatives considered: Per-user configuration and deleting records outside the new selection; rejected because authentication was explicitly removed and configuration changes should not destroy history.
+- Consequences: Anyone who can reach the API can replace the shared configuration. Existing stored records remain queryable after a configuration change.
+- Supersedes: None
+
+## D-024: Serve Scalar from a checked-in OpenAPI document
+
+- Date: 2026-09-07
+- Status: Accepted
+- Context: The headless API needs an interactive client for discovering and exercising endpoints.
+- Decision: Serve a checked-in OpenAPI 3.1 document at `/openapi.json` and Scalar API Reference at `/docs`.
+- Reasons: A static contract is small, reviewable, and independent from route-framework migration work.
+- Alternatives considered: Generate OpenAPI by replacing all Hono validators with OpenAPI route definitions; deferred because it expands this slice without changing runtime behavior.
+- Consequences: Endpoint changes must update routes, contracts, tests, and `openapi.ts` together.
+- Supersedes: None

@@ -88,10 +88,12 @@ export const ingestionRunSchema = z.object({
 
 export type IngestionRun = z.infer<typeof ingestionRunSchema>;
 
-export const createIngestionSchema = z.object({
-  from: z.iso.datetime({ offset: true }).optional(),
-  to: z.iso.datetime({ offset: true }).optional(),
-});
+export const createIngestionSchema = z
+  .object({
+    from: z.iso.datetime({ offset: true }).optional(),
+    to: z.iso.datetime({ offset: true }).optional(),
+  })
+  .strict();
 
 export type CreateIngestionInput = z.infer<typeof createIngestionSchema>;
 
@@ -105,6 +107,21 @@ export const listOrderWinsQuerySchema = z.object({
 });
 
 export type ListOrderWinsQuery = z.infer<typeof listOrderWinsQuerySchema>;
+
+export const updateTrackingConfigurationSchema = z
+  .object({
+    symbols: z
+      .array(z.string().trim().min(1).max(64))
+      .max(500)
+      .transform((symbols) => [...new Set(symbols.map((symbol) => symbol.toUpperCase()))].sort()),
+  })
+  .strict();
+
+export type UpdateTrackingConfigurationInput = z.infer<typeof updateTrackingConfigurationSchema>;
+
+export function toTrackingConfigurationDto(symbols: readonly string[]) {
+  return { mode: symbols.length === 0 ? ("all" as const) : ("symbols" as const), symbols };
+}
 
 export function toOrderWinDto(orderWin: OrderWin) {
   return {
