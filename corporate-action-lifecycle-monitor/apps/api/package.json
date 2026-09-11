@@ -1,0 +1,8 @@
+{
+	"name": "@lifecycle/api",
+	"private": true,
+	"type": "module",
+	"dependencies": {
+		"@lifecycle/contracts": "workspace:*"
+	}
+}
