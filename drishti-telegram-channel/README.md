@@ -18,11 +18,13 @@ Drishti WebSockets; the application does not use REST polling or REST catch-up.
 Drishti Sandbox accounts do not include live WebSocket streams. Manage plans and add-ons
 in the [Drishti developer portal](https://platform.manasija.in/developer-portal).
 
-## Complete setup on Windows PowerShell
+## Complete setup
 
 Run these steps from the repository directory.
 
 ### 1. Create and activate a virtual environment
+
+Windows PowerShell:
 
 ```powershell
 python --version
@@ -32,13 +34,25 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-The prompt should now begin with `(.venv)`. If PowerShell blocks activation, allow scripts
-for only the current terminal and activate again:
+If PowerShell blocks activation, allow scripts for only the current terminal and activate
+again:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
+
+macOS or Linux:
+
+```bash
+python3 --version
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+The prompt should now begin with `(.venv)`.
 
 ### 2. Get a Drishti API key with WebSocket access
 
@@ -69,10 +83,20 @@ and generate a replacement with `/token`.
 
 ### 4. Create `.env` and `config.yaml`
 
+Windows PowerShell:
+
 ```powershell
 Copy-Item .env.example .env
 Copy-Item config.example.yaml config.yaml
 notepad .env
+```
+
+macOS or Linux:
+
+```bash
+cp .env.example .env
+cp config.example.yaml config.yaml
+${EDITOR:-nano} .env
 ```
 
 Enter the Drishti key and Telegram token. Leave the chat ID as `pending` temporarily:
@@ -93,7 +117,7 @@ After sending `/start` to your bot, run this command. It reads the token from `.
 printing it and lists recent private chats returned by Telegram's
 [`getUpdates`](https://core.telegram.org/bots/api#getupdates) method.
 
-```powershell
+```shell
 drishti-telegram --config config.yaml chat-id
 ```
 
@@ -108,11 +132,7 @@ private chat.
 
 ### 6. Configure the watchlist and streams
 
-Open `config.yaml`:
-
-```powershell
-notepad config.yaml
-```
+Open `config.yaml` in your preferred text editor.
 
 For normal watchlist delivery, keep `full_feed: false` and list the symbols you want:
 
@@ -165,7 +185,7 @@ full_feed: true
 
 ### 7. Validate the complete setup
 
-```powershell
+```shell
 drishti-telegram --config config.yaml check
 ```
 
@@ -187,7 +207,7 @@ Do not continue to `run` until `check` succeeds.
 
 ### 8. Start forwarding live events
 
-```powershell
+```shell
 drishti-telegram --config config.yaml run
 ```
 
@@ -212,29 +232,6 @@ TELEGRAM_CHAT_ID=@my_market_alerts
 Run `drishti-telegram --config config.yaml check` again. A bot username and a personal
 Telegram username are not channel IDs.
 
-## macOS and Linux installation
-
-The bot, Telegram, Drishti, `.env`, configuration, `check`, and `run` steps are the same.
-Only the environment commands differ:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-cp .env.example .env
-cp config.example.yaml config.yaml
-```
-
-After sending `/start` to the bot, find the private chat ID with:
-
-```bash
-drishti-telegram --config config.yaml chat-id
-```
-
-Copy the printed numeric ID into `TELEGRAM_CHAT_ID`, then continue with configuration,
-`check`, and `run` exactly as shown above.
-
 ## Common errors
 
 | Error | Cause | Fix |
@@ -245,7 +242,7 @@ Copy the printed numeric ID into `TELEGRAM_CHAT_ID`, then continue with configur
 | `Drishti account plan Sandbox does not enable...` | Sandbox has no live WebSocket add-ons. | Enable at least one WebSocket add-on in the Drishti developer portal. |
 | `does not enable the configured WebSocket streams` | `config.yaml` enables products not available to the API key. | Disable those streams or enable their add-ons, then run `check` again. |
 | `did not grant full-feed access` | `full_feed: true` was used without the required entitlement. | Use a symbol watchlist with `full_feed: false`, or use an eligible Scale account. |
-| `drishti-telegram` is not recognized | The virtual environment is inactive or the package is not installed. | Activate `.venv` and run `python -m pip install -e .`. |
+| `drishti-telegram` is not recognized | The virtual environment is inactive or the package is not installed. | Activate `.venv` using the command for your operating system, then run `python -m pip install -e .`. |
 
 ## Notification behavior
 
@@ -270,7 +267,7 @@ Use a process supervisor if the notifier must remain online continuously.
 
 ## Development
 
-```powershell
+```shell
 python -m pip install -e ".[dev]"
 pytest
 ruff check .
