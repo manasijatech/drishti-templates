@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drishti-telegram"
+version = "0.1.0"
+description = "Forward Drishti WebSocket events to a private Telegram chat or channel."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "drishti-sdk>=1.0.16,<2",
+  "httpx>=0.28,<1",
+  "python-dotenv>=1,<2",
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.15",
+  "pytest>=8",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.11",
+  "types-PyYAML>=6",
+]
+
+[project.scripts]
+drishti-telegram = "drishti_telegram.cli:main"
+
+[tool.setuptools.package-data]
+drishti_telegram = ["py.typed"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+packages = ["drishti_telegram"]
+
+[[tool.mypy.overrides]]
+module = ["drishti_sdk", "drishti_sdk.*"]
+ignore_missing_imports = true

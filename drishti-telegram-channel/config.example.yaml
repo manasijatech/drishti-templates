@@ -1,0 +1,41 @@
+# A symbol watchlist is required unless full_feed is explicitly enabled.
+symbols:
+  - RELIANCE
+  - TCS
+
+# Full-feed delivery requires a Drishti Scale plan. To use it, set this to
+# true and set symbols to []. An empty list is rejected when this is false.
+full_feed: false
+
+# All populated detailed fields are shown by default. Replace ["*"] with a
+# smaller field list when you want to limit a stream's Telegram output.
+streams:
+  news:
+    enabled: true
+    detailed: true
+    fields: ["*"]
+
+  block-deals:
+    enabled: true
+    detailed: true
+    fields: ["*"]
+
+  announcements:
+    enabled: true
+    detailed: true
+    fields: ["*"]
+
+  earnings:
+    enabled: true
+    detailed: true
+    fields: ["*"]
+
+  concalls:
+    enabled: true
+    detailed: true
+    fields: ["*"]
+
+  alerts:
+    enabled: true
+    detailed: true
+    fields: ["*"]

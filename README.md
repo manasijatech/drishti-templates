@@ -12,6 +12,7 @@ market events for developer applications and AI agents.
 | --- | --- |
 | [`chat-drishti-mcp`](./chat-drishti-mcp) | An AI chat application that uses Drishti MCP for Indian-equity research. |
 | [`corporate-action-lifecycle-monitor`](./corporate-action-lifecycle-monitor) | Filing-linked corporate-action lifecycle reconstruction and live updates. |
+| [`drishti-telegram-channel`](./drishti-telegram-channel) | Forward live Drishti market events to a private Telegram chat or channel. |
 | [`indian-earnings-monitor`](./indian-earnings-monitor) | A local monitor for earnings, news, and conference calls. |
 | [`order-win-tracker`](./order-win-tracker) | Typed ingestion of exchange-reported order-win announcements. |
 
