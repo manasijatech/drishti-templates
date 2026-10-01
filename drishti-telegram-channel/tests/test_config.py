@@ -42,6 +42,31 @@ def test_empty_watchlist_requires_explicit_full_feed(tmp_path: Path) -> None:
         )
 
 
+def test_empty_watchlist_is_allowed_when_every_enabled_stream_is_full_feed(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "config.yaml"
+    disabled = "\n".join(
+        f"  {product}:\n    enabled: false" for product in PRODUCTS if product != "earnings"
+    )
+    path.write_text(
+        f"symbols: []\nstreams:\n{disabled}\n  earnings:\n    full_feed: true\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(
+        path,
+        environ={
+            "DRISHTI_API_KEY": "drishti-key",
+            "TELEGRAM_BOT_TOKEN": "telegram-token",
+            "TELEGRAM_CHAT_ID": "@market-alerts",
+        },
+    )
+
+    assert config.symbols == ()
+    assert config.streams["earnings"].full_feed is True
+
+
 def test_stream_settings_override_defaults_per_product(tmp_path: Path) -> None:
     path = tmp_path / "config.yaml"
     path.write_text(
@@ -73,6 +98,32 @@ streams:
         "summary",
         "metadata.source",
     )
+
+
+def test_one_stream_can_request_full_feed_without_removing_the_watchlist(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        """
+symbols: [RELIANCE, TCS]
+streams:
+  earnings:
+    full_feed: true
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(
+        path,
+        environ={
+            "DRISHTI_API_KEY": "drishti-key",
+            "TELEGRAM_BOT_TOKEN": "telegram-token",
+            "TELEGRAM_CHAT_ID": "@market-alerts",
+        },
+    )
+
+    assert config.symbols == ("RELIANCE", "TCS")
+    assert config.streams["earnings"].full_feed is True
+    assert config.streams["news"].full_feed is False
 
 
 def test_credentials_are_rejected_in_yaml(tmp_path: Path) -> None:
