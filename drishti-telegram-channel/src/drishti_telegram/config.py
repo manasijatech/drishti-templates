@@ -23,6 +23,7 @@ SECRET_KEYS = {"drishti_api_key", "telegram_bot_token", "telegram_chat_id"}
 class StreamConfig:
     enabled: bool = True
     detailed: bool = True
+    full_feed: bool = False
     fields: tuple[str, ...] = ("*",)
 
 
@@ -72,8 +73,6 @@ def load_config(path: Path, *, environ: Mapping[str, str]) -> AppConfig:
         )
     )
     full_feed = _boolean(loaded.get("full_feed"), name="full_feed", default=False)
-    if not symbols and not full_feed:
-        raise ValueError("Set at least one symbol or explicitly set full_feed: true")
     raw_streams = loaded.get("streams", {})
     if not isinstance(raw_streams, dict):
         raise ValueError("streams must be a YAML mapping")
@@ -102,10 +101,26 @@ def load_config(path: Path, *, environ: Mapping[str, str]) -> AppConfig:
                 name=f"streams.{product}.detailed",
                 default=True,
             ),
+            full_feed=_boolean(
+                raw_stream.get("full_feed"),
+                name=f"streams.{product}.full_feed",
+                default=False,
+            ),
             fields=tuple(field.strip() for field in raw_fields),
         )
     if not any(stream.enabled for stream in streams.values()):
         raise ValueError("Enable at least one stream product")
+    watchlist_streams = [
+        product
+        for product, stream in streams.items()
+        if stream.enabled and not (full_feed or stream.full_feed)
+    ]
+    if not symbols and watchlist_streams:
+        names = ", ".join(watchlist_streams)
+        raise ValueError(
+            "Set at least one symbol or set full_feed: true for every enabled stream. "
+            f"Streams still requiring a watchlist: {names}"
+        )
 
     dotenv_environment = {
         name: value

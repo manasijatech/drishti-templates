@@ -58,6 +58,7 @@ class AccountPlan:
 class AccountAccess:
     plan: str
     enabled_streams: dict[str, str]
+    full_market_streams: frozenset[str] | None
 
 
 def validate_account_access(
@@ -111,7 +112,42 @@ def validate_account_access(
             f"streams in config.yaml or manage add-ons at {UPGRADE_URL}"
         )
 
-    return AccountAccess(plan=plan, enabled_streams=enabled_streams)
+    full_market_streams: frozenset[str] | None = None
+    live_entitlement = account.get("live_entitlement")
+    if isinstance(live_entitlement, Mapping):
+        raw_full_market = live_entitlement.get("full_market_products")
+        if raw_full_market is not None:
+            if not isinstance(raw_full_market, list):
+                raise AccountAccessError("Drishti returned invalid full-market entitlement details")
+            full_market_streams = frozenset(
+                product
+                for item in raw_full_market
+                if (product := _config_product_name(item)) in PRODUCTS
+            )
+
+    requested_full_market = [
+        product
+        for product, stream in config.streams.items()
+        if stream.enabled and (config.full_feed or stream.full_feed)
+    ]
+    if full_market_streams is not None:
+        unavailable_full_market = [
+            product for product in requested_full_market if product not in full_market_streams
+        ]
+        if unavailable_full_market:
+            names = ", ".join(unavailable_full_market)
+            available = ", ".join(sorted(full_market_streams)) or "none"
+            raise AccountAccessError(
+                f"Drishti account plan {plan} does not enable configured full-market access "
+                f"for: {names}. Full-market products: {available}. Use watchlist delivery for "
+                f"those streams or manage add-ons at {UPGRADE_URL}"
+            )
+
+    return AccountAccess(
+        plan=plan,
+        enabled_streams=enabled_streams,
+        full_market_streams=full_market_streams,
+    )
 
 
 def _plan_name(tier: str) -> str:
@@ -132,9 +168,14 @@ def _config_product_name(product: object) -> str:
 
 
 def _raise_subscription_error(message: str, code: str | None = None) -> None:
-    if code == "403" or "paid plan" in message.lower():
+    if "paid plan" in message.lower():
         raise PlanRequiredError(
             f"Drishti WebSocket access requires a paid plan. Upgrade at {UPGRADE_URL}"
+        )
+    if code == "403":
+        raise BridgeError(
+            "Drishti rejected the WebSocket subscription. Check the configured product "
+            f"add-ons and full-market entitlements at {UPGRADE_URL}"
         )
     raise BridgeError(f"Drishti subscription failed: {message}")
 
@@ -161,10 +202,11 @@ async def identify_plan(
         if stream.enabled
     }
     for product, stream in enabled.items():
+        full_feed = config.full_feed or stream.full_feed
         try:
             await session.subscribe(
                 product,
-                symbols=() if config.full_feed else config.symbols,
+                symbols=() if full_feed else config.symbols,
                 detailed=stream.detailed,
             )
         except DrishtiWebSocketError as exc:
@@ -181,9 +223,11 @@ async def identify_plan(
             raise TimeoutError("Timed out waiting for Drishti subscription acknowledgements")
         event = await asyncio.wait_for(anext(events), timeout=remaining)
         if isinstance(event, SubscribedEvent) and event.product in pending:
-            if config.full_feed and not event.full_feed:
+            stream = enabled[event.product]
+            full_feed = config.full_feed or stream.full_feed
+            if full_feed and not event.full_feed:
                 raise BridgeError(f"Drishti did not grant full-feed access for {event.product}")
-            if not config.full_feed and set(event.symbols or ()) != set(config.symbols):
+            if not full_feed and set(event.symbols or ()) != set(config.symbols):
                 raise BridgeError(
                     f"Drishti did not accept the configured watchlist for {event.product}"
                 )
@@ -194,8 +238,9 @@ async def identify_plan(
         elif isinstance(event, DataEvent):
             buffered.append(event)
 
-    tier = next(iter(tiers), "")
-    return AccountPlan(name=_plan_name(tier), tier=tier), _prepend(buffered, events)
+    tier = ", ".join(sorted(tiers))
+    name = _plan_name(tier) if len(tiers) <= 1 else "Mixed"
+    return AccountPlan(name=name, tier=tier), _prepend(buffered, events)
 
 
 async def forward_events(

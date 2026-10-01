@@ -1,10 +1,11 @@
-# A symbol watchlist is required unless full_feed is explicitly enabled.
+# A symbol watchlist is used by every enabled stream that does not request full-market access.
 symbols:
   - RELIANCE
   - TCS
 
-# Full-feed delivery requires a Drishti Scale plan. To use it, set this to
-# true and set symbols to []. An empty list is rejected when this is false.
+# This is the default for every stream. Set it to true only when every enabled
+# product has a full-market entitlement. Product-specific add-ons can instead
+# enable full_feed under one stream while the others continue using this watchlist.
 full_feed: false
 
 # All populated detailed fields are shown by default. Replace ["*"] with a
@@ -28,6 +29,9 @@ streams:
   earnings:
     enabled: true
     detailed: true
+    # Set this to true when the earnings add-on includes full-market access.
+    # The other streams will continue using the symbol watchlist above.
+    full_feed: false
     fields: ["*"]
 
   concalls:

@@ -116,7 +116,7 @@ def test_check_reports_the_acknowledged_plan(
     assert stderr.getvalue() == ""
 
 
-def test_check_prompts_websocket_403_accounts_to_upgrade(
+def test_check_explains_ambiguous_websocket_403(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,5 +136,5 @@ def test_check_prompts_websocket_403_accounts_to_upgrade(
     )
 
     assert exit_code == 1
-    assert "requires a paid plan" in stderr.getvalue()
+    assert "product add-ons and full-market entitlements" in stderr.getvalue()
     assert "https://platform.manasija.in/developer-portal" in stderr.getvalue()

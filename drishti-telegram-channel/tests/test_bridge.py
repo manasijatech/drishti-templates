@@ -8,6 +8,7 @@ from drishti_sdk import DataEvent, DrishtiWebSocketError, ErrorEvent, Subscribed
 from drishti_telegram.bridge import (
     UPGRADE_URL,
     AccountAccessError,
+    BridgeError,
     PlanRequiredError,
     forward_events,
     identify_plan,
@@ -68,6 +69,86 @@ def test_account_preflight_accepts_enabled_configured_streams() -> None:
 
     assert access.plan == "Pro"
     assert access.enabled_streams["block-deals"] == "pro_1000"
+
+
+def test_account_preflight_accepts_product_full_market_addon_on_starter() -> None:
+    config = make_config()
+    config.streams["earnings"] = StreamConfig(full_feed=True)
+
+    access = validate_account_access(
+        config,
+        {
+            "data": {
+                "status": "active",
+                "metadata": {"subscription_plan_name": "Starter"},
+                "websocket_addons": [
+                    {
+                        "product": product.replace("-", "_"),
+                        "enabled": True,
+                        "tier": "starter_100",
+                    }
+                    for product in PRODUCTS
+                ],
+                "live_entitlement": {
+                    "active_symbol_limit": 100,
+                    "full_market_products": ["earnings"],
+                },
+            }
+        },
+    )
+
+    assert access.plan == "Starter"
+    assert access.full_market_streams == frozenset({"earnings"})
+
+
+def test_account_preflight_rejects_full_feed_for_product_without_entitlement() -> None:
+    config = make_config()
+    config.streams["earnings"] = StreamConfig(full_feed=True)
+
+    with pytest.raises(AccountAccessError, match="full-market access for: earnings"):
+        validate_account_access(
+            config,
+            {
+                "data": {
+                    "status": "active",
+                    "metadata": {"subscription_plan_name": "Pro"},
+                    "websocket_addons": [
+                        {
+                            "product": product.replace("-", "_"),
+                            "enabled": True,
+                            "tier": "pro_1000",
+                        }
+                        for product in PRODUCTS
+                    ],
+                    "live_entitlement": {"full_market_products": ["announcements"]},
+                }
+            },
+        )
+
+
+def test_account_preflight_defers_full_feed_check_when_entitlement_field_is_absent() -> None:
+    config = make_config()
+    config.streams["earnings"] = StreamConfig(full_feed=True)
+
+    access = validate_account_access(
+        config,
+        {
+            "data": {
+                "status": "active",
+                "metadata": {"subscription_plan_name": "Pro"},
+                "websocket_addons": [
+                    {
+                        "product": product.replace("-", "_"),
+                        "enabled": True,
+                        "tier": "pro_1000",
+                    }
+                    for product in PRODUCTS
+                ],
+            }
+        },
+    )
+
+    assert access.full_market_streams is None
 
 
 def test_account_preflight_lists_every_unavailable_configured_stream() -> None:
@@ -152,7 +233,7 @@ async def test_identify_plan_normalizes_direct_subscription_403() -> None:
         ) -> None:
             raise DrishtiWebSocketError("Forbidden", code="403")
 
-    with pytest.raises(PlanRequiredError, match=UPGRADE_URL):
+    with pytest.raises(BridgeError, match="add-ons"):
         await identify_plan(RejectingSession([]), make_config(), timeout=1)
 
 
@@ -164,6 +245,48 @@ async def test_full_feed_requires_full_feed_acknowledgements() -> None:
     ]
 
     with pytest.raises(RuntimeError, match="full-feed"):
+        await identify_plan(FakeSession(events), config, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_product_full_feed_keeps_other_streams_on_the_watchlist() -> None:
+    config = make_config()
+    config.streams["earnings"] = StreamConfig(full_feed=True)
+    events = [
+        SubscribedEvent(
+            product=product.replace("-", "_"),
+            tier="full_market" if product == "earnings" else "starter_100",
+            full_feed=product == "earnings",
+            symbols=None if product == "earnings" else ["RELIANCE", "TCS"],
+        )
+        for product in PRODUCTS
+    ]
+    session = FakeSession(events)
+
+    plan, _ = await identify_plan(session, config, timeout=1)
+
+    subscriptions = {product: symbols for product, symbols, _ in session.subscriptions}
+    assert subscriptions["earnings"] == ()
+    assert subscriptions["news"] == ("RELIANCE", "TCS")
+    assert plan.name == "Mixed"
+    assert plan.tier == "full_market, starter_100"
+
+
+@pytest.mark.asyncio
+async def test_product_full_feed_requires_its_own_acknowledgement() -> None:
+    config = make_config()
+    config.streams["earnings"] = StreamConfig(full_feed=True)
+    events = [
+        SubscribedEvent(
+            product=product.replace("-", "_"),
+            tier="starter_100",
+            full_feed=False,
+            symbols=["RELIANCE", "TCS"],
+        )
+        for product in PRODUCTS
+    ]
+
+    with pytest.raises(BridgeError, match="earnings"):
         await identify_plan(FakeSession(events), config, timeout=1)
 
 

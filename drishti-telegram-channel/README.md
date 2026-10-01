@@ -124,8 +124,28 @@ visible. You can limit output later with an explicit field list such as:
 fields: [symbol, company_name, summary, category, date]
 ```
 
-Use `full_feed: true` only with a Drishti Scale entitlement. Full-feed configuration must
-use an empty symbol list:
+Full-market access is product-specific. For example, a Starter or Pro account with the
+full-market earnings add-on can receive all earnings while other streams continue using the
+plan's symbol watchlist:
+
+```yaml
+symbols:
+  - RELIANCE
+  - TCS
+
+full_feed: false
+
+streams:
+  earnings:
+    enabled: true
+    full_feed: true
+```
+
+The account's normal symbol limit still applies to watchlist streams. The earnings add-on
+does not give the other products full-market access.
+
+Use the top-level `full_feed: true` only when every enabled stream has a full-market
+entitlement. In that case, the symbol list can be empty:
 
 ```yaml
 symbols: []
@@ -283,7 +303,8 @@ A bot username and a personal Telegram username are not channel IDs.
 | `Telegram bot must be a channel administrator` | The bot cannot post to the configured channel. | Add it under channel **Administrators** and enable **Post Messages**. |
 | `Drishti account plan Sandbox does not enable...` | Sandbox has no live WebSocket add-ons. | Enable at least one WebSocket add-on in the Drishti developer portal. |
 | `does not enable the configured WebSocket streams` | `config.yaml` enables products not available to the API key. | Disable those streams or enable their add-ons, then run `check` again. |
-| `did not grant full-feed access` | `full_feed: true` was used without the required entitlement. | Use a symbol watchlist with `full_feed: false`, or use an eligible Scale account. |
+| `does not enable configured full-market access` | One or more streams request `full_feed: true` without a matching product entitlement. | Disable full feed for those streams or enable their full-market add-ons. |
+| `did not grant full-feed access` | The account profile allowed full-market access, but the subscription acknowledgement did not. | Run `check` again; if it persists, verify the product add-on in the developer portal. |
 | `drishti-telegram` is not recognized | The virtual environment is inactive or the package is not installed. | Activate `.venv` using the command for your operating system, then run `python -m pip install -e .`. |
 | `Cannot connect to the Docker daemon` | Docker Desktop or Docker Engine is not running. | Start Docker, wait until the engine is ready, and rerun the command. |
 
