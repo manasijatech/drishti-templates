@@ -10,7 +10,7 @@ Drishti WebSockets; the application does not use REST polling or REST catch-up.
 
 ## What you need
 
-- Python 3.10 or newer
+- Docker Desktop/Engine with Docker Compose, or Python 3.10 or newer
 - A Drishti API key
 - WebSocket add-ons for each stream product you want to enable
 - A Telegram bot token from [BotFather](https://t.me/BotFather)
@@ -18,43 +18,11 @@ Drishti WebSockets; the application does not use REST polling or REST catch-up.
 Drishti Sandbox accounts do not include live WebSocket streams. Manage plans and add-ons
 in the [Drishti developer portal](https://platform.manasija.in/developer-portal).
 
-## Complete setup
+## Setup
 
 Run these steps from the repository directory.
 
-### 1. Create and activate a virtual environment
-
-Windows PowerShell:
-
-```powershell
-python --version
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-If PowerShell blocks activation, allow scripts for only the current terminal and activate
-again:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-macOS or Linux:
-
-```bash
-python3 --version
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-The prompt should now begin with `(.venv)`.
-
-### 2. Get a Drishti API key with WebSocket access
+### 1. Get a Drishti API key with WebSocket access
 
 1. Open the [Drishti developer portal](https://platform.manasija.in/developer-portal).
 2. Create or copy your API key.
@@ -65,7 +33,7 @@ The prompt should now begin with `(.venv)`.
 The `check` command later compares every enabled stream in `config.yaml` with the account's
 current WebSocket add-ons and reports all unavailable streams together.
 
-### 3. Create the Telegram bot
+### 2. Create the Telegram bot
 
 1. Open the verified [@BotFather](https://t.me/BotFather) chat.
 2. Send `/newbot`.
@@ -81,7 +49,7 @@ messages. The official Telegram tutorial documents the same token and first-cont
 If a token is exposed in a screenshot, terminal log, or commit, send `/revoke` to BotFather
 and generate a replacement with `/token`.
 
-### 4. Create `.env` and `config.yaml`
+### 3. Create `.env` and `config.yaml`
 
 Windows PowerShell:
 
@@ -107,30 +75,11 @@ TELEGRAM_BOT_TOKEN=your-new-telegram-bot-token
 TELEGRAM_CHAT_ID=pending
 ```
 
-Do not quote, share, or commit these values. The CLI automatically loads `.env` from the
-same directory as the selected YAML configuration. An environment variable already set in
-the shell overrides the corresponding `.env` value.
+Do not quote, share, or commit these values. Docker Compose passes `.env` into the container.
+For a native installation, the CLI loads `.env` from the same directory as the selected YAML
+configuration. An environment variable already set in the shell takes precedence.
 
-### 5. Find your numeric private chat ID
-
-After sending `/start` to your bot, run this command. It reads the token from `.env` without
-printing it and lists recent private chats returned by Telegram's
-[`getUpdates`](https://core.telegram.org/bots/api#getupdates) method.
-
-```shell
-drishti-telegram --config config.yaml chat-id
-```
-
-Copy the numeric `chat_id` into `.env`:
-
-```dotenv
-TELEGRAM_CHAT_ID=1234567890
-```
-
-Do not use your personal `@username` here. Telegram's Bot API requires the numeric ID for a
-private chat.
-
-### 6. Configure the watchlist and streams
+### 4. Configure the watchlist and streams
 
 Open `config.yaml` in your preferred text editor.
 
@@ -183,7 +132,86 @@ symbols: []
 full_feed: true
 ```
 
-### 7. Validate the complete setup
+### 5. Choose how to run the bot
+
+Docker provides the same commands on Windows, macOS, and Linux. Native Python installation
+is also supported.
+
+#### Docker
+
+Install Docker Desktop on Windows or macOS, or Docker Engine with the Compose plugin on
+Linux. Then build the image:
+
+```shell
+docker compose build
+```
+
+After sending `/start` to your bot, retrieve the numeric private chat ID:
+
+```shell
+docker compose run --rm bot chat-id
+```
+
+Copy the printed `chat_id` into `.env`, replacing `pending`, and validate the complete setup:
+
+```shell
+docker compose run --rm bot check
+```
+
+Start the bot in the background and follow its logs:
+
+```shell
+docker compose up -d
+docker compose logs -f bot
+```
+
+Press `Ctrl+C` to stop following the logs; the bot continues running. Stop and remove the
+container with:
+
+```shell
+docker compose down
+```
+
+The container runs as a non-root user, mounts `config.yaml` read-only, exposes no ports, and
+restarts unless explicitly stopped.
+
+#### Native Python
+
+Windows PowerShell:
+
+```powershell
+python --version
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+If PowerShell blocks activation, allow scripts for only the current terminal and activate
+again:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+macOS or Linux:
+
+```bash
+python3 --version
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+The prompt should now begin with `(.venv)`. Retrieve the numeric private chat ID:
+
+```shell
+drishti-telegram --config config.yaml chat-id
+```
+
+Copy the printed `chat_id` into `.env`, replacing `pending`, and validate the setup:
 
 ```shell
 drishti-telegram --config config.yaml check
@@ -205,7 +233,7 @@ OK: Telegram destination access; Drishti account: Pro; configured WebSocket stre
 
 Do not continue to `run` until `check` succeeds.
 
-### 8. Start forwarding live events
+Start forwarding live events:
 
 ```shell
 drishti-telegram --config config.yaml run
@@ -216,6 +244,9 @@ open. Stop the process with `Ctrl+C`.
 
 Only events received while the process is online can be forwarded. There is no replay of
 events missed while it was stopped.
+
+Do not use your personal `@username` as `TELEGRAM_CHAT_ID`. Telegram's Bot API requires the
+numeric ID for a private chat.
 
 ## Send to a Telegram channel instead
 
@@ -229,8 +260,19 @@ events missed while it was stopped.
 TELEGRAM_CHAT_ID=@my_market_alerts
 ```
 
-Run `drishti-telegram --config config.yaml check` again. A bot username and a personal
-Telegram username are not channel IDs.
+Run the applicable validation command again:
+
+```shell
+docker compose run --rm bot check
+```
+
+or:
+
+```shell
+drishti-telegram --config config.yaml check
+```
+
+A bot username and a personal Telegram username are not channel IDs.
 
 ## Common errors
 
@@ -243,6 +285,7 @@ Telegram username are not channel IDs.
 | `does not enable the configured WebSocket streams` | `config.yaml` enables products not available to the API key. | Disable those streams or enable their add-ons, then run `check` again. |
 | `did not grant full-feed access` | `full_feed: true` was used without the required entitlement. | Use a symbol watchlist with `full_feed: false`, or use an eligible Scale account. |
 | `drishti-telegram` is not recognized | The virtual environment is inactive or the package is not installed. | Activate `.venv` using the command for your operating system, then run `python -m pip install -e .`. |
+| `Cannot connect to the Docker daemon` | Docker Desktop or Docker Engine is not running. | Start Docker, wait until the engine is ready, and rerun the command. |
 
 ## Notification behavior
 

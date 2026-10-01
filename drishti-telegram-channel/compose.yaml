@@ -1,0 +1,14 @@
+services:
+  bot:
+    image: drishti-telegram:local
+    build:
+      context: .
+    env_file:
+      - .env
+    volumes:
+      - type: bind
+        source: ./config.yaml
+        target: /app/config.yaml
+        read_only: true
+    init: true
+    restart: unless-stopped
