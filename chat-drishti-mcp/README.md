@@ -35,19 +35,25 @@ Click a suggestion in the sidebar, or type your own question.
 | Market summary | "How did the Indian market do today?" |
 | F&O event risk | "Which Bank Nifty stocks have results or board meetings in the next two weeks?" |
 | Negative news on index stocks | "Any negative news on Bank Nifty stocks in the last 7 days?" |
+| Movers, explained | "Show today's top gainers and losers, with one line on why each moved." |
 | Why a stock moved | "Which large-cap stock moved the most today, and why?" |
 | Unusual volume | "Which stocks have unusually high trading volume today?" |
 | Block deals | "Show the biggest block deals of the last week." |
 | Company news & filings | "What is the latest news and exchange filings for Reliance Industries?" |
+| Blockbuster & weak results | "Which companies reported the strongest and weakest results in the last 2 days?" |
 | Results, with source pages | "Compare the latest quarterly results of HDFC Bank and ICICI Bank." |
+| Order wins | "Show the biggest order wins in the last 3 days, with size, client and timeline." |
+| News to affected stocks | "Which listed companies could be affected by the Starlink satellite internet news?" |
 | Earnings calls | "What did Infosys management say in their latest earnings call?" |
 | Theme discovery | "Which companies talked about capacity expansion in their latest earnings calls?" |
 | Results calendar | "Which companies are announcing their quarterly results this week?" |
 | Corporate actions | "List dividends, buybacks, bonus issues and stock splits from the last 7 days." |
 | Red flags | "Any red flags in Nifty 50 companies in the last 30 days?" |
+| Risk check | "Run a risk check on my portfolio: upcoming results, negative news and red-flag filings." |
+| Push notifications | "Draft 3 to 5 push notifications about today's most important developments." |
 | Client-ready notes | "Write a short WhatsApp note for my clients on today's market." Use the copy button under the answer. |
 | Hindi or Gujarati | "Give me today's market update in Gujarati." |
-| Your portfolio | Add holdings in **Settings → Portfolio**, then click it under **My stocks**. |
+| Your portfolio | Add holdings in **Settings → Portfolio**, then click it under **My stocks**. Ask for a daily or weekly summary. Only stock symbols are sent to Drishti. |
 
 Answers link to the original exchange filing or results page where Drishti has one.
 
