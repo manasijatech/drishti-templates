@@ -178,9 +178,9 @@ export function filterSessions(
 
 export const DEMO_PROMPT_GROUPS = [
 	"Market",
+	"F&O watch",
 	"Companies",
-	"Results & calls",
-	"Watch",
+	"For clients",
 ] as const;
 
 export type DemoPromptGroup = (typeof DEMO_PROMPT_GROUPS)[number];
@@ -198,9 +198,16 @@ export const DEMO_PROMPTS: {
 	{
 		group: "Market",
 		icon: "chart",
-		label: "Market today",
+		label: "Morning note",
 		prompt:
-			"How did the Indian market do today? Give a short summary with the top gainers and losers.",
+			"Give me today's morning note: global cues, GIFT Nifty, and the key company news to watch.",
+	},
+	{
+		group: "F&O watch",
+		icon: "calendar",
+		label: "Bank Nifty event risk",
+		prompt:
+			"Which Bank Nifty stocks have results or board meetings in the next two weeks?",
 	},
 	{
 		group: "Companies",
@@ -210,32 +217,24 @@ export const DEMO_PROMPTS: {
 			"Which large-cap stock moved the most today, and why? Check its news and exchange filings.",
 	},
 	{
-		group: "Results & calls",
+		group: "Companies",
 		icon: "earnings",
 		label: "Infosys earnings call",
 		prompt:
 			"What did Infosys management say in their latest earnings call? Include guidance and key numbers.",
 	},
 	{
-		group: "Results & calls",
-		icon: "sector",
-		label: "Who is expanding?",
+		group: "For clients",
+		icon: "chat",
+		label: "WhatsApp market note",
 		prompt:
-			"Which companies talked about capacity expansion or new capex in their latest earnings calls?",
+			"Write a short WhatsApp note for my clients on today's market and the top company news.",
 	},
 	{
-		group: "Watch",
-		icon: "dividend",
-		label: "Dividends & buybacks",
-		prompt:
-			"List dividends, buybacks, bonus issues and stock splits announced in the last 7 days.",
-	},
-	{
-		group: "Watch",
-		icon: "risk",
-		label: "Red flags in Nifty 50",
-		prompt:
-			"Any red flags in Nifty 50 companies in the last 30 days, like penalties, litigation, credit rating changes or regulator inspections?",
+		group: "For clients",
+		icon: "chat",
+		label: "Market update in Gujarati",
+		prompt: "Give me today's market update in Gujarati.",
 	},
 	{
 		group: "Market",
@@ -251,11 +250,18 @@ export const DEMO_PROMPTS: {
 		prompt: "Show the biggest block deals of the last week.",
 	},
 	{
-		group: "Companies",
-		icon: "news",
-		label: "Reliance news & filings",
+		group: "F&O watch",
+		icon: "risk",
+		label: "Negative news: Bank Nifty",
 		prompt:
-			"What is the latest news and exchange filings for Reliance Industries?",
+			"Any negative news on Bank Nifty stocks in the last 7 days? Summarise the risk for each bank.",
+	},
+	{
+		group: "F&O watch",
+		icon: "news",
+		label: "Nifty 50 important filings",
+		prompt:
+			"Show important exchange filings from Nifty 50 companies in the last 3 days.",
 	},
 	{
 		group: "Companies",
@@ -265,16 +271,24 @@ export const DEMO_PROMPTS: {
 			"Compare the latest quarterly results of HDFC Bank and ICICI Bank in a table: revenue, profit and growth.",
 	},
 	{
-		group: "Results & calls",
-		icon: "calendar",
-		label: "Results this week",
-		prompt: "Which companies are announcing their quarterly results this week?",
+		group: "Companies",
+		icon: "sector",
+		label: "Who is expanding?",
+		prompt:
+			"Which companies talked about capacity expansion or new capex in their latest earnings calls?",
 	},
 	{
-		group: "Watch",
+		group: "For clients",
 		icon: "portfolio",
-		label: "My portfolio briefing",
+		label: "Client portfolio review",
 		prompt:
 			"Brief me on my portfolio: what changed in filings, news, results, block deals and prices?",
+	},
+	{
+		group: "For clients",
+		icon: "dividend",
+		label: "Dividends & buybacks",
+		prompt:
+			"List dividends, buybacks, bonus issues and stock splits announced in the last 7 days.",
 	},
 ];

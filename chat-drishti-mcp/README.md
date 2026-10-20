@@ -31,7 +31,10 @@ Click a suggestion in the sidebar, or type your own question.
 
 | What | Try asking |
 |------|-----------|
+| Morning note | "Give me today's morning note: global cues, GIFT Nifty, and key company news." |
 | Market summary | "How did the Indian market do today?" |
+| F&O event risk | "Which Bank Nifty stocks have results or board meetings in the next two weeks?" |
+| Negative news on index stocks | "Any negative news on Bank Nifty stocks in the last 7 days?" |
 | Why a stock moved | "Which large-cap stock moved the most today, and why?" |
 | Unusual volume | "Which stocks have unusually high trading volume today?" |
 | Block deals | "Show the biggest block deals of the last week." |
@@ -42,11 +45,13 @@ Click a suggestion in the sidebar, or type your own question.
 | Results calendar | "Which companies are announcing their quarterly results this week?" |
 | Corporate actions | "List dividends, buybacks, bonus issues and stock splits from the last 7 days." |
 | Red flags | "Any red flags in Nifty 50 companies in the last 30 days?" |
+| Client-ready notes | "Write a short WhatsApp note for my clients on today's market." Use the copy button under the answer. |
+| Hindi or Gujarati | "Give me today's market update in Gujarati." |
 | Your portfolio | Add holdings in **Settings → Portfolio**, then click it under **My stocks**. |
 
 Answers link to the original exchange filing or results page where Drishti has one.
 
-**Not available from Drishti:** screens on ratios like PE or ROE, technical indicators like RSI or MACD, and trading. For push alerts (Telegram etc.), see the other templates in this repo: `drishti-telegram-channel`, `indian-earnings-monitor`, `corporate-action-lifecycle-monitor`, `order-win-tracker`.
+**Not available from Drishti:** screens on ratios like PE or ROE, technical indicators like RSI or MACD, option chain and open interest, and trading. For push alerts (Telegram etc.), see the other templates in this repo: `drishti-telegram-channel`, `indian-earnings-monitor`, `corporate-action-lifecycle-monitor`, `order-win-tracker`.
 
 ## Settings (`.env`)
 

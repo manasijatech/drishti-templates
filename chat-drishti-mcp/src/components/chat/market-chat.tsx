@@ -348,7 +348,7 @@ export function MarketChat({
 						modelBadge={modelBadgeLabel}
 						onSend={({ content }) => sendPrompt(content)}
 						onStop={stop}
-						placeholder="Ask about a stock, a sector, results, or your portfolio..."
+						placeholder="Ask about stocks, results or F&O event risk, in English, Hindi or Gujarati..."
 						status={status}
 						suggestions={{
 							items: SUGGESTIONS,
@@ -358,8 +358,8 @@ export function MarketChat({
 						toolRenderers={CHAT_TOOL_RENDERERS}
 					/>
 					<p className="px-4 pb-3 text-center text-[11px] text-muted-foreground">
-						Response speed and answer quality depend on the AI model you
-						choose. Drishti only supplies the market data.
+						Response speed and answer quality depend on the AI model you choose.
+						Drishti only supplies the market data.
 					</p>
 				</div>
 				<ChatConfigPanel
