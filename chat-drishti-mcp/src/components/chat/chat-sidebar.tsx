@@ -18,8 +18,7 @@ import {
 	getSessionIconKey,
 	groupSessionsByDate,
 	SIDEBAR_ICONS,
-	SIDEBAR_SUGGESTIONS,
-	SIDEBAR_TOOL_SHORTCUTS,
+	DEMO_PROMPTS,
 	type SidebarIconKey,
 } from "~/lib/chat-sidebar-utils";
 import { cn } from "~/lib/utils";
@@ -36,7 +35,6 @@ type ChatSidebarProps = {
 	onSendPrompt: (prompt: string) => void;
 	watchlists: Watchlist[];
 	portfolios: Portfolio[];
-	showSuggestions?: boolean;
 	className?: string;
 };
 
@@ -185,7 +183,6 @@ export function ChatSidebar({
 	onSendPrompt,
 	watchlists,
 	portfolios,
-	showSuggestions = false,
 	className,
 }: ChatSidebarProps) {
 	const [searchQuery, setSearchQuery] = useState("");
@@ -386,21 +383,6 @@ export function ChatSidebar({
 							</p>
 						) : null}
 
-						{showSuggestions && !searchQuery && (
-							<div>
-								<SidebarSectionLabel collapsed={collapsed}>Suggested</SidebarSectionLabel>
-								{SIDEBAR_SUGGESTIONS.map((item) => (
-									<PromptRow
-										collapsed={collapsed}
-										iconKey={item.icon}
-										key={item.label}
-										label={item.label}
-										onClick={() => onSendPrompt(item.prompt)}
-									/>
-								))}
-							</div>
-						)}
-
 						{workspaceItems.length > 0 && !searchQuery && (
 							<div>
 								<SidebarSectionLabel collapsed={collapsed}>Watchlists</SidebarSectionLabel>
@@ -418,8 +400,8 @@ export function ChatSidebar({
 
 						{!searchQuery && (
 							<div>
-								<SidebarSectionLabel collapsed={collapsed}>Tools</SidebarSectionLabel>
-								{SIDEBAR_TOOL_SHORTCUTS.map((item) => (
+								<SidebarSectionLabel collapsed={collapsed}>Try asking</SidebarSectionLabel>
+								{DEMO_PROMPTS.map((item) => (
 									<PromptRow
 										collapsed={collapsed}
 										iconKey={item.icon}

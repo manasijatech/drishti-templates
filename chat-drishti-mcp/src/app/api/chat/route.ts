@@ -1,20 +1,21 @@
-import { NextResponse } from "next/server";
-import type { UIMessage } from "ai";
 import { InputGuardrailTripwireTriggered } from "@openai/agents";
+import type { UIMessage } from "ai";
+import { NextResponse } from "next/server";
 import { z } from "zod";
-import type { ModelConfig } from "~/types";
+import { env } from "~/env";
 import {
 	createGuardrailRefusalResponse,
+	type GuardrailViolation,
 	getRefusalMessage,
 	validateChatInput,
-	type GuardrailViolation,
 } from "~/lib/guardrails";
 import {
 	hasEncryptedApiKey,
 	resolveDrishtiApiKeyFromEncrypted,
 	resolveModelConfigFromEncrypted,
 } from "~/lib/model-config";
-import { runSupervisorChat } from "~/lib/orchestrator";
+import { DrishtiConnectionError, runAgentChat } from "~/lib/orchestrator";
+import type { ModelConfig } from "~/types";
 
 const uiMessageSchema = z.custom<UIMessage>(
 	(val) =>
@@ -25,13 +26,6 @@ const uiMessageSchema = z.custom<UIMessage>(
 		"parts" in val &&
 		Array.isArray((val as UIMessage).parts),
 );
-
-const subAgentIdSchema = z.enum([
-	"research_agent",
-	"news_analyst",
-	"market_analyst",
-	"portfolio_agent",
-]);
 
 const encryptedApiKeySchema = z.object({
 	encryptedApiKey: z.string(),
@@ -54,11 +48,11 @@ const chatRequestSchema = z.object({
 		iv: z.string(),
 		baseUrl: z.string().optional(),
 	}),
-	drishtiApiKey: encryptedApiKeySchema,
+	/** Optional when the server has DRISHTI_API_KEY set. */
+	drishtiApiKey: encryptedApiKeySchema.optional(),
 	sessionId: z.string().optional(),
 	memoryContext: z.string().optional(),
 	portfolioContext: z.string().optional(),
-	enabledSubAgents: z.array(subAgentIdSchema).optional(),
 });
 
 export const maxDuration = 120;
@@ -84,7 +78,7 @@ export async function POST(req: Request) {
 			)
 		) {
 			return NextResponse.json(
-				{ error: "API key required. Configure your model in Settings." },
+				{ error: "Add your AI model API key in Settings." },
 				{ status: 401 },
 			);
 		}
@@ -97,24 +91,32 @@ export async function POST(req: Request) {
 			return NextResponse.json(
 				{
 					error:
-						"Could not decrypt API key. Re-save your key in Configuration.",
+						"Could not read your saved API key. Please save it again in Settings.",
 				},
 				{ status: 401 },
 			);
 		}
 
-		let drishtiApiKey: string;
-		try {
-			drishtiApiKey = resolveDrishtiApiKeyFromEncrypted(parsed.data.drishtiApiKey);
-		} catch (error) {
-			console.error("[chat] Drishti API key decrypt failed:", error);
+		let drishtiApiKey = env.DRISHTI_API_KEY;
+		if (parsed.data.drishtiApiKey?.encryptedApiKey) {
+			try {
+				drishtiApiKey = resolveDrishtiApiKeyFromEncrypted(
+					parsed.data.drishtiApiKey,
+				);
+			} catch (error) {
+				console.error("[chat] Drishti API key decrypt failed:", error);
+				return NextResponse.json(
+					{
+						error:
+							"Could not read your saved Drishti API key. Please save it again in Settings.",
+					},
+					{ status: 401 },
+				);
+			}
+		}
+		if (!drishtiApiKey) {
 			return NextResponse.json(
-				{
-					error:
-						error instanceof Error
-							? error.message
-							: "Could not decrypt Drishti MCP API key. Re-save it in Configuration.",
-				},
+				{ error: "Add your Drishti API key in Settings." },
 				{ status: 401 },
 			);
 		}
@@ -129,14 +131,13 @@ export async function POST(req: Request) {
 			);
 		}
 
-		const { response, cleanup } = await runSupervisorChat(
+		const { response, cleanup } = await runAgentChat(
 			{
 				messages: parsed.data.messages,
 				modelConfig,
 				sessionId: parsed.data.sessionId,
 				memoryContext: parsed.data.memoryContext,
 				portfolioContext: parsed.data.portfolioContext,
-				enabledSubAgents: parsed.data.enabledSubAgents,
 				drishtiApiKey,
 			},
 			{ signal: req.signal },
@@ -204,6 +205,9 @@ export async function POST(req: Request) {
 				getRefusalMessage(outputInfo?.violation),
 				requestMessages,
 			);
+		}
+		if (error instanceof DrishtiConnectionError) {
+			return NextResponse.json({ error: error.message }, { status: 502 });
 		}
 		console.error("[chat] error:", error);
 		return NextResponse.json(

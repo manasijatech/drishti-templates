@@ -1,43 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import {
-	Bank,
-	ChartLineUp,
-	ChartPieSlice,
-	Newspaper,
-	Scales,
-	WaveSine,
-} from "@phosphor-icons/react";
 import { DefaultChatTransport } from "ai";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
-import { InputBar } from "~/components/agent-elements/input-bar";
-import { DrishtiLoader } from "~/components/brand/drishti-loader";
-import { ChatConfigPanel, type ConfigFocusTarget } from "~/components/chat/chat-config-panel";
-import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
-import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
-import { ChatSidebar } from "~/components/chat/chat-sidebar";
-import { ChatExportButton } from "~/components/chat/chat-export-button";
 import {
-	ModelCompareResults,
-	type CompareRun,
-} from "~/components/chat/model-compare-results";
+	ChatConfigPanel,
+	type ConfigFocusTarget,
+} from "~/components/chat/chat-config-panel";
+import { ChatConfigSheet } from "~/components/chat/chat-config-sheet";
+import { ChatExportButton } from "~/components/chat/chat-export-button";
+import { ChatSidebar } from "~/components/chat/chat-sidebar";
+import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { QueryCostMenu } from "~/components/chat/query-cost-menu";
 import { OnboardingDialog } from "~/components/onboarding/onboarding-dialog";
 import { Button } from "~/components/ui/button";
+import { useModelsCatalog } from "~/hooks/use-models-catalog";
+import { DEMO_PROMPTS, SIDEBAR_ICONS } from "~/lib/chat-sidebar-utils";
 import { CHAT_TOOL_RENDERERS } from "~/lib/chat-tool-renderers";
-import type { ComparisonExportResult } from "~/lib/chat-export";
 import { getModelDisplayName } from "~/lib/openrouter-models-core";
-import {
-	MODEL_COMPARE_MIN,
-} from "~/lib/model-compare";
 import {
 	getLastQueryUsageFromMessages,
 	sumQueryUsageFromMessages,
 } from "~/lib/query-usage-message";
-import { getEnabledSubAgentIds, normalizeSubAgentPreferences } from "~/lib/sub-agents";
-import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import {
 	portfolioToContext,
 	useChatStore,
@@ -47,46 +32,33 @@ import {
 
 const SIDEBAR_COLLAPSED_KEY = "drishti-sidebar-collapsed";
 
-const SUGGESTIONS = [
-	{
-		id: "1",
-		label: "Reliance today",
-		value: "What happened to Reliance today?",
-		icon: <ChartLineUp className="size-3.5" weight="light" />,
-	},
-	{
-		id: "2",
-		label: "Compare IT majors",
-		value: "Compare TCS and Infosys fundamentals and recent performance.",
-		icon: <Scales className="size-3.5" weight="light" />,
-	},
-	{
-		id: "3",
-		label: "HDFC headlines",
-		value: "Show recent announcements for HDFC Bank.",
-		icon: <Newspaper className="size-3.5" weight="light" />,
-	},
-	{
-		id: "4",
-		label: "My portfolio",
-		value: "Analyze my portfolio holdings, sector allocation, and risks.",
-		icon: <ChartPieSlice className="size-3.5" weight="light" />,
-	},
-	{
-		id: "5",
-		label: "Banking movers",
-		value: "Which banking stocks outperformed this quarter?",
-		icon: <Bank className="size-3.5" weight="light" />,
-	},
-	{
-		id: "6",
-		label: "Market summary",
-		value: "Summarize today's Indian stock market.",
-		icon: <WaveSine className="size-3.5" weight="light" />,
-	},
-];
+const SUGGESTIONS = DEMO_PROMPTS.slice(0, 6).map((item) => {
+	const Icon = SIDEBAR_ICONS[item.icon];
+	return {
+		id: item.label,
+		label: item.label,
+		value: item.prompt,
+		icon: <Icon className="size-3.5" weight="light" />,
+	};
+});
 
-export function MarketChat() {
+/** The API returns `{ error }` JSON; show just the message to the user. */
+function toReadableError(error: Error | undefined): Error | undefined {
+	if (!error) return undefined;
+	try {
+		const parsed = JSON.parse(error.message) as { error?: unknown };
+		if (typeof parsed.error === "string") return new Error(parsed.error);
+	} catch {
+		// Not JSON; use the message as-is.
+	}
+	return error;
+}
+
+export function MarketChat({
+	serverHasDrishtiKey = false,
+}: {
+	serverHasDrishtiKey?: boolean;
+}) {
 	const {
 		sessions,
 		activeSessionId,
@@ -95,34 +67,22 @@ export function MarketChat() {
 		updateSession,
 		togglePinSession,
 	} = useChatStore();
-	const getActiveEncryptedConfig = useModelStore((s) => s.getActiveEncryptedConfig);
-	const getEncryptedConfigForTarget = useModelStore(
-		(s) => s.getEncryptedConfigForTarget,
+	const getActiveEncryptedConfig = useModelStore(
+		(s) => s.getActiveEncryptedConfig,
 	);
-	const getEncryptedDrishtiApiKey = useModelStore((s) => s.getEncryptedDrishtiApiKey);
-	const hasStoredApiKey = useModelStore((s) => s.hasStoredApiKey);
-	const hasStoredDrishtiApiKey = useModelStore((s) => s.hasStoredDrishtiApiKey);
+	const encryptedDrishtiKey = useModelStore((s) => s.drishtiApiKey);
+	const configs = useModelStore((s) => s.configs);
 	const activeProvider = useModelStore((s) => s.activeProvider);
 	const activeModel = useModelStore((s) => s.activeModel);
-	const compareMode = useModelStore((s) => s.compareMode);
-	const compareModels = useModelStore((s) => s.compareModels);
-	const setActiveModel = useModelStore((s) => s.setActiveModel);
-	const setCompareMode = useModelStore((s) => s.setCompareMode);
-	const configs = useModelStore((s) => s.configs);
-	const encryptedDrishtiKey = useModelStore((s) => s.drishtiApiKey);
 	const onboardingStatus = useModelStore((s) => s.onboardingStatus);
-	const { models: catalogModels } = useModelsCatalog({ provider: activeProvider });
+	const { models: catalogModels } = useModelsCatalog({
+		provider: activeProvider,
+	});
 	const memoryContext = useMemoryStore((s) => s.toContextString());
-	const preferences = useMemoryStore((s) => s.preferences);
 	const portfolios = useMemoryStore((s) => s.portfolios);
-	const watchlists = useMemoryStore((s) => s.watchlists);	const enabledSubAgents = useMemo(
-		() => getEnabledSubAgentIds(normalizeSubAgentPreferences(preferences.subAgents)),
-		[preferences.subAgents],
-	);
+	const watchlists = useMemoryStore((s) => s.watchlists);
 
 	const [storeHydrated, setStoreHydrated] = useState(false);
-	const [configReady, setConfigReady] = useState(false);
-	const [canChat, setCanChat] = useState(false);
 	const [infoBarDismissed, setInfoBarDismissed] = useState(false);
 	const [configSheetOpen, setConfigSheetOpen] = useState(false);
 	const [panelFocus, setPanelFocus] = useState<{
@@ -134,13 +94,17 @@ export function MarketChat() {
 		target: ConfigFocusTarget;
 	}>({ signal: 0, target: "model" });
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-	const [compareRun, setCompareRun] = useState<CompareRun | null>(null);
-	const [compareStreaming, setCompareStreaming] = useState(false);
-	const [compareDraft, setCompareDraft] = useState("");
-	const [compareExportResults, setCompareExportResults] = useState<
-		ComparisonExportResult[]
-	>([]);
-	const compareStopAllRef = useRef<(() => void) | null>(null);
+
+	const hasModelKey =
+		activeProvider === "ollama" ||
+		configs.some(
+			(c) =>
+				c.provider === activeProvider && Boolean(c.encryptedApiKey?.trim()),
+		);
+	const hasDrishtiKey =
+		serverHasDrishtiKey ||
+		Boolean(encryptedDrishtiKey?.encryptedApiKey?.trim());
+	const canChat = hasModelKey && hasDrishtiKey;
 
 	useEffect(() => {
 		try {
@@ -159,13 +123,10 @@ export function MarketChat() {
 			// ignore
 		}
 	}, []);
+
 	useEffect(() => {
 		const persistApi = useChatStore.persist;
-		if (!persistApi) {
-			setStoreHydrated(true);
-			return;
-		}
-		if (persistApi.hasHydrated()) {
+		if (!persistApi || persistApi.hasHydrated()) {
 			setStoreHydrated(true);
 			return;
 		}
@@ -180,20 +141,8 @@ export function MarketChat() {
 	}, [storeHydrated, activeSessionId, createSession]);
 
 	useEffect(() => {
-		const hasModelKey =
-			hasStoredApiKey(activeProvider) || activeProvider === "ollama";
-		const ready = hasModelKey && hasStoredDrishtiApiKey();
-		setCanChat(ready);
-		setConfigReady(true);
-		if (ready) setInfoBarDismissed(false);
-	}, [
-		hasStoredApiKey,
-		hasStoredDrishtiApiKey,
-		activeProvider,
-		activeModel,
-		configs,
-		encryptedDrishtiKey,
-	]);
+		if (canChat) setInfoBarDismissed(false);
+	}, [canChat]);
 
 	const portfolioContext = useMemo(
 		() => portfolioToContext(portfolios),
@@ -206,39 +155,35 @@ export function MarketChat() {
 				api: "/api/chat",
 				prepareSendMessagesRequest: async ({ messages, body }) => {
 					const modelConfig = getActiveEncryptedConfig();
-					const drishtiApiKey = getEncryptedDrishtiApiKey();
-					if (
-						!modelConfig ||
-						(!hasStoredApiKey(modelConfig.provider) &&
-							modelConfig.provider !== "ollama")
-					) {
-						throw new Error("Add your API key in Configuration.");
-					}
-					if (!drishtiApiKey) {
-						throw new Error("Add your Drishti MCP API key in Configuration.");
+					if (!modelConfig && activeProvider !== "ollama") {
+						throw new Error("Add your AI model API key in Settings.");
 					}
 					return {
 						body: {
 							...body,
 							messages,
-							modelConfig,
-							drishtiApiKey,
+							modelConfig: modelConfig ?? {
+								provider: activeProvider,
+								model: activeModel,
+								encryptedApiKey: "",
+								iv: "",
+							},
+							drishtiApiKey: encryptedDrishtiKey ?? undefined,
 							sessionId: activeSessionId,
 							memoryContext,
 							portfolioContext,
-							enabledSubAgents,
 						},
 					};
 				},
 			}),
 		[
 			getActiveEncryptedConfig,
-			getEncryptedDrishtiApiKey,
-			hasStoredApiKey,
+			activeProvider,
+			activeModel,
+			encryptedDrishtiKey,
 			activeSessionId,
 			memoryContext,
 			portfolioContext,
-			enabledSubAgents,
 		],
 	);
 
@@ -260,16 +205,10 @@ export function MarketChat() {
 		}
 	}, [activeSessionId, sessions, messages.length, setMessages]);
 
-	const openModelConfig = useCallback(
+	const openSettings = useCallback(
 		(target?: ConfigFocusTarget) => {
-			const hasModelKey =
-				hasStoredApiKey(activeProvider) || activeProvider === "ollama";
 			const resolvedTarget: ConfigFocusTarget =
-				target === "model" || target === "drishti"
-					? target
-					: hasModelKey && !hasStoredDrishtiApiKey()
-						? "drishti"
-						: "model";
+				target ?? (hasModelKey && !hasDrishtiKey ? "drishti" : "model");
 
 			if (typeof window !== "undefined" && window.innerWidth < 1280) {
 				setConfigSheetOpen(true);
@@ -284,91 +223,25 @@ export function MarketChat() {
 				target: resolvedTarget,
 			}));
 		},
-		[activeProvider, hasStoredApiKey, hasStoredDrishtiApiKey],
+		[hasModelKey, hasDrishtiKey],
 	);
 
-	const handleSend = useCallback(
-		({ content }: { content: string }) => {
-			if (!canChat || !content.trim()) return;
-
-			if (compareMode) {
-				if (compareModels.length < MODEL_COMPARE_MIN) {
-					openModelConfig();
-					return;
-				}
-
-				const configuredCount = compareModels.filter((target) =>
-					Boolean(getEncryptedConfigForTarget(target)),
-				).length;
-
-				if (configuredCount < MODEL_COMPARE_MIN) {
-					openModelConfig();
-					return;
-				}
-
-				compareStopAllRef.current?.();
-				setCompareStreaming(true);
-				setCompareExportResults([]);
-				setCompareRun({
-					id: crypto.randomUUID(),
-					query: content.trim(),
-					priorMessages: compareRun ? [] : messages,
-				});
+	const sendPrompt = useCallback(
+		(prompt: string) => {
+			if (!prompt.trim()) return;
+			if (!canChat) {
+				openSettings();
 				return;
 			}
-
-			void sendMessage({ text: content });
+			void sendMessage({ text: prompt });
 		},
-		[
-			canChat,
-			compareMode,
-			compareModels,
-			compareRun,
-			getEncryptedConfigForTarget,
-			messages,
-			sendMessage,
-			openModelConfig,
-		],
+		[canChat, openSettings, sendMessage],
 	);
 
-	const handleStop = useCallback(() => {
-		if (compareRun) {
-			compareStopAllRef.current?.();
-			return;
-		}
-		stop();
-	}, [compareRun, stop]);
-
-	const handleCloseCompare = useCallback(() => {
-		compareStopAllRef.current?.();
-		setCompareRun(null);
-		setCompareStreaming(false);
-		setCompareExportResults([]);
-	}, []);
-
-	const handleUseComparedModel = useCallback(
-		(provider: typeof activeProvider, model: string) => {
-			setActiveModel(provider, model);
-			setCompareMode(false);
-			setCompareRun(null);
-			setCompareStreaming(false);
-			setCompareExportResults([]);
-		},
-		[setActiveModel, setCompareMode],
+	const modelBadgeLabel = useMemo(
+		() => getModelDisplayName(catalogModels, activeProvider, activeModel),
+		[activeProvider, activeModel, catalogModels],
 	);
-
-	const modelBadgeLabel = useMemo(() => {
-		if (compareMode) {
-			return `Compare · ${compareModels.length} models`;
-		}
-		return getModelDisplayName(catalogModels, activeProvider, activeModel);
-	}, [
-		compareMode,
-		compareModels.length,
-		activeProvider,
-		activeModel,
-		catalogModels,
-	]);
 
 	const lastQueryUsage = useMemo(
 		() => getLastQueryUsageFromMessages(messages),
@@ -379,75 +252,24 @@ export function MarketChat() {
 		[messages],
 	);
 
-	const showCompareResults = compareRun !== null;
-	const chatStatus = compareStreaming ? "submitted" : status;
-	const activeSession = sessions.find((session) => session.id === activeSessionId);
-	const activeChatTitle = activeSession?.title ?? "New chat";
-	const exportTitle = showCompareResults
-		? `Model comparison: ${compareRun.query}`
-		: activeChatTitle;
-	const exportDisabled = showCompareResults
-		? compareStreaming || compareExportResults.length === 0
-		: messages.length === 0 || status === "streaming" || status === "submitted";
-
-	const compareSharedContext = useMemo(() => {
-		if (!encryptedDrishtiKey) return null;
-		return {
-			sessionId: activeSessionId ?? undefined,
-			memoryContext,
-			portfolioContext,
-			enabledSubAgents,
-			drishtiApiKey: encryptedDrishtiKey,
-		};
-	}, [
-		activeSessionId,
-		memoryContext,
-		portfolioContext,
-		enabledSubAgents,
-		encryptedDrishtiKey,
-	]);
-
-	const handleCompareRegisterStop = useCallback((stopAll: () => void) => {
-		compareStopAllRef.current = stopAll;
-	}, []);
-
-	const showSidebarSuggestions = messages.length === 0 && !showCompareResults;
-
-	const handleSidebarPrompt = useCallback(
-		(prompt: string) => {
-			if (!canChat) {
-				openModelConfig();
-				return;
-			}
-			void sendMessage({ text: prompt });
-		},
-		[canChat, openModelConfig, sendMessage],
+	const activeSession = sessions.find(
+		(session) => session.id === activeSessionId,
 	);
+	const activeChatTitle = activeSession?.title ?? "New chat";
+	const isBusy = status === "streaming" || status === "submitted";
 
-	const hasModelKey =
-		hasStoredApiKey(activeProvider) || activeProvider === "ollama";
-	const hasDrishtiKey = hasStoredDrishtiApiKey();
-
-	const inputInfoBar =
+	const setupInfoBar =
 		!canChat && !infoBarDismissed
 			? {
-					title:
-						!hasModelKey && !hasDrishtiKey
-							? "API keys required"
-							: !hasDrishtiKey
-								? "Drishti MCP API key required"
-								: "Model API key required",
-					description:
-						!hasModelKey && !hasDrishtiKey
-							? "Save your model and Drishti MCP keys in Configuration."
-							: !hasDrishtiKey
-								? "Save your Drishti MCP key in Configuration."
-								: "Save your model API key in Configuration.",
+					title: "Finish setup to start chatting",
+					description: !hasModelKey
+						? "Add your AI model API key in Settings."
+						: "Add your Drishti API key in Settings.",
 					position: "bottom" as const,
 					onClose: () => setInfoBarDismissed(true),
 					action: {
-						label: "Add key",
-						onClick: () => openModelConfig(),
+						label: "Open settings",
+						onClick: () => openSettings(),
 					},
 				}
 			: undefined;
@@ -458,7 +280,10 @@ export function MarketChat() {
 
 	return (
 		<div className="flex h-screen flex-col">
-			<OnboardingDialog open={storeHydrated && onboardingStatus === "pending"} />
+			<OnboardingDialog
+				open={onboardingStatus === "pending"}
+				serverHasDrishtiKey={serverHasDrishtiKey}
+			/>
 			<div className="flex flex-1 overflow-hidden">
 				<ChatSidebar
 					activeSessionId={activeSessionId}
@@ -466,11 +291,10 @@ export function MarketChat() {
 					onCollapsedChange={handleSidebarCollapsedChange}
 					onNewChat={() => createSession()}
 					onSelectSession={setActiveSession}
-					onSendPrompt={handleSidebarPrompt}
+					onSendPrompt={sendPrompt}
 					onTogglePin={togglePinSession}
 					portfolios={portfolios}
 					sessions={sessions}
-					showSuggestions={showSidebarSuggestions}
 					watchlists={watchlists}
 				/>
 				<div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -487,136 +311,59 @@ export function MarketChat() {
 							{activeChatTitle}
 						</p>
 						<ChatExportButton
-							comparison={
-								showCompareResults
-									? {
-											query: compareRun.query,
-											results: compareExportResults,
-										}
-									: undefined
-							}
-							disabled={exportDisabled}
+							disabled={messages.length === 0 || isBusy}
 							messages={messages}
-							title={exportTitle}
+							title={activeChatTitle}
 						/>
-						<div className="lg:hidden">
+						<div className="xl:hidden">
 							<ChatConfigSheet
 								focusSignal={sheetFocus.signal}
 								focusTarget={sheetFocus.target}
 								onOpenChange={setConfigSheetOpen}
 								open={configSheetOpen}
+								serverHasDrishtiKey={serverHasDrishtiKey}
 							/>
 						</div>
 					</div>
-					{!configReady ? (
-						<DrishtiLoader fullscreen label="Loading configuration" />
-					) : showCompareResults && compareRun && compareSharedContext ? (
-						<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-							<ModelCompareResults
+					<AgentChat
+						className="flex-1"
+						classNames={{ inputBar: "pb-4" }}
+						emptyStatePosition="center"
+						emptySuggestionsPlacement="empty"
+						emptySuggestionsPosition="bottom"
+						error={toReadableError(error)}
+						infoBar={setupInfoBar}
+						inputDisabled={!canChat}
+						inputRightActions={
+							<QueryCostMenu
 								catalogModels={catalogModels}
-								compareModels={compareModels}
-								getEncryptedConfigForTarget={getEncryptedConfigForTarget}
-								key={compareRun.id}
-								onClose={handleCloseCompare}
-								onExportChange={setCompareExportResults}
-								onRegisterStop={handleCompareRegisterStop}
-								onStreamingChange={setCompareStreaming}
-								onUseModel={handleUseComparedModel}
-								run={compareRun}
-								sharedContext={compareSharedContext}
-								toolRenderers={CHAT_TOOL_RENDERERS}
+								isStreaming={isBusy}
+								lastQueryUsage={lastQueryUsage}
+								modelId={activeModel}
+								provider={activeProvider}
+								sessionUsage={sessionQueryUsage}
 							/>
-							<div className="shrink-0 border-border border-t px-4 pb-4">
-								<InputBar
-									className="pt-3"
-									disabled={!canChat}
-									infoBar={
-										compareMode
-											? {
-													title: "Compare mode",
-													description: `Next prompt runs on ${compareModels.length} models in parallel.`,
-													position: "bottom" as const,
-												}
-											: undefined
-									}
-									modelBadge={modelBadgeLabel}
-									onChange={setCompareDraft}
-									onSend={({ content }) => {
-										handleSend({ content });
-										setCompareDraft("");
-									}}
-									onStop={handleStop}
-									placeholder="Ask the same question across models..."
-									rightActions={
-										<QueryCostMenu
-											catalogModels={catalogModels}
-											isStreaming={compareStreaming}
-											lastQueryUsage={null}
-											modelId={activeModel}
-											provider={activeProvider}
-											sessionUsage={sessionQueryUsage}
-										/>
-									}
-									status={chatStatus}
-									value={compareDraft}
-								/>
-							</div>
-						</div>
-					) : (
-						<AgentChat
-							className="flex-1"
-							classNames={{ inputBar: "pb-4" }}
-							emptyStatePosition="center"
-							emptySuggestionsPlacement="empty"
-							emptySuggestionsPosition="bottom"
-							error={error ?? undefined}
-							infoBar={
-								compareMode
-									? {
-											title: "Compare mode",
-											description: `Select ${MODEL_COMPARE_MIN}+ models in Configuration, then send a prompt.`,
-											position: "bottom" as const,
-										}
-									: inputInfoBar
-							}
-							inputDisabled={!canChat}
-							inputRightActions={
-								<QueryCostMenu
-									catalogModels={catalogModels}
-									isStreaming={
-										status === "streaming" || status === "submitted"
-									}
-									lastQueryUsage={lastQueryUsage}
-									modelId={activeModel}
-									provider={activeProvider}
-									sessionUsage={sessionQueryUsage}
-								/>
-							}
-							modelBadge={modelBadgeLabel}
-							messages={messages}
-							onSend={handleSend}
-							onStop={handleStop}
-							placeholder={
-								compareMode
-									? "Ask the same question across models..."
-									: "Ask about a stock, sector move, or your portfolio..."
-							}
-							status={chatStatus}
-							suggestions={{
-								items: SUGGESTIONS,
-								className: "justify-center",
-								itemClassName: "h-8",
-							}}
-							toolRenderers={CHAT_TOOL_RENDERERS}
-						/>
-					)}
+						}
+						messages={messages}
+						modelBadge={modelBadgeLabel}
+						onSend={({ content }) => sendPrompt(content)}
+						onStop={stop}
+						placeholder="Ask about a stock, a sector, results, or your portfolio..."
+						status={status}
+						suggestions={{
+							items: SUGGESTIONS,
+							className: "justify-center",
+							itemClassName: "h-8",
+						}}
+						toolRenderers={CHAT_TOOL_RENDERERS}
+					/>
 				</div>
 				<ChatConfigPanel
 					focusSignal={panelFocus.signal}
 					focusTarget={panelFocus.target}
+					serverHasDrishtiKey={serverHasDrishtiKey}
 				/>
 			</div>
-
 		</div>
 	);
 }

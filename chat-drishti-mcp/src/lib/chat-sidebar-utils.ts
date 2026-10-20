@@ -176,51 +176,49 @@ export function filterSessions(
 	return sessions.filter((s) => s.title.toLowerCase().includes(q));
 }
 
-export const SIDEBAR_SUGGESTIONS: {
+/** Demo prompts. Each one maps to real Drishti MCP operations. */
+export const DEMO_PROMPTS: {
 	icon: SidebarIconKey;
 	label: string;
 	prompt: string;
 }[] = [
 	{
-		icon: "portfolio",
-		label: "Analyze my portfolio",
-		prompt: "Analyze my portfolio holdings, sector allocation, and risks.",
-	},
-	{
-		icon: "movers",
-		label: "Top momentum stocks today",
-		prompt: "What are the top momentum stocks in the Indian market today?",
-	},
-	{
-		icon: "bank",
-		label: "Banking sector outlook",
-		prompt: "Give me a banking sector outlook for Indian equities.",
-	},
-	{
-		icon: "sector",
-		label: "Explain latest market news",
-		prompt: "Summarize today's Indian stock market news and what it means for investors.",
-	},
-];
-
-export const SIDEBAR_TOOL_SHORTCUTS: {
-	icon: SidebarIconKey;
-	label: string;
-	prompt: string;
-}[] = [
-	{
-		icon: "screener",
-		label: "Stock screener",
-		prompt: "Screen for quality Indian stocks with strong momentum and fundamentals.",
+		icon: "chart",
+		label: "Market today",
+		prompt:
+			"How did the Indian market do today? Give a short summary with the top gainers and losers.",
 	},
 	{
 		icon: "news",
-		label: "Market news",
-		prompt: "Summarize today's key Indian market news and sector impact.",
+		label: "Reliance news & filings",
+		prompt:
+			"What is the latest news and exchange filings for Reliance Industries?",
 	},
 	{
 		icon: "calendar",
-		label: "Earnings calendar",
-		prompt: "What major earnings announcements are coming up this week in India?",
+		label: "Results this week",
+		prompt: "Which companies are announcing their quarterly results this week?",
+	},
+	{
+		icon: "earnings",
+		label: "Infosys earnings call",
+		prompt: "What did Infosys management say in their latest earnings call?",
+	},
+	{
+		icon: "bank",
+		label: "Banking sector",
+		prompt:
+			"How is the banking sector doing? Show the top banking stocks by market cap.",
+	},
+	{
+		icon: "movers",
+		label: "52-week highs",
+		prompt: "Which stocks are trading near their 52-week high?",
+	},
+	{
+		icon: "portfolio",
+		label: "My portfolio",
+		prompt:
+			"Give me an update on my portfolio: prices, news, and upcoming results.",
 	},
 ];

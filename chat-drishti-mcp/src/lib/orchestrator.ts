@@ -1,17 +1,11 @@
-import { run, type RunStreamEvent } from "@openai/agents";
+import { type RunStreamEvent, run } from "@openai/agents";
 import {
-	createAiSdkUiMessageStream,
 	type AiSdkUiMessageStreamSource,
+	createAiSdkUiMessageStream,
 } from "@openai/agents-extensions/ai-sdk-ui";
-import { createUIMessageStreamResponse } from "ai";
 import type { UIMessage } from "ai";
-import {
-	createMarketAnalystAgent,
-	createNewsAnalystAgent,
-	createPortfolioAgent,
-	createResearchAgent,
-	createSupervisorAgent,
-} from "~/agents";
+import { createUIMessageStreamResponse } from "ai";
+import { createDrishtiAgent } from "~/agents/drishti-agent";
 import {
 	logAgentTrace,
 	logToolExecution,
@@ -19,64 +13,65 @@ import {
 } from "~/lib/observability";
 import { connectMarketDataServers } from "~/mcp/registry";
 import { createAgentModel } from "~/providers";
-import { getEnabledSubAgentIds, normalizeSubAgentPreferences } from "~/lib/sub-agents";
-import type { ChatRequestBody, QueryUsageMetadata, SubAgentId } from "~/types";
+import type { ChatRequestBody, QueryUsageMetadata } from "~/types";
 
-function extractTextFromMessages(messages: UIMessage[]): string {
-	const lastUser = [...messages].reverse().find((m) => m.role === "user");
-	if (!lastUser) return "";
+/** Thrown when the Drishti MCP server cannot be reached (usually a bad API key). */
+export class DrishtiConnectionError extends Error {
+	constructor() {
+		super(
+			"Could not connect to Drishti market data. Check your Drishti API key and try again.",
+		);
+		this.name = "DrishtiConnectionError";
+	}
+}
 
-	return lastUser.parts
+function messageText(message: UIMessage): string {
+	return message.parts
 		.filter((p): p is { type: "text"; text: string } => p.type === "text")
 		.map((p) => p.text)
 		.join("\n");
 }
 
-function buildConversationContext(messages: UIMessage[]): string {
-	return messages
-		.slice(-10)
-		.map((m) => {
-			const text = m.parts
-				.filter((p): p is { type: "text"; text: string } => p.type === "text")
-				.map((p) => p.text)
-				.join(" ");
-			return `${m.role}: ${text}`;
-		})
+function buildPrompt(messages: UIMessage[]): string {
+	const lastUser = [...messages].reverse().find((m) => m.role === "user");
+	const history = messages
+		.slice(-10, -1)
+		.map((m) => `${m.role}: ${messageText(m)}`)
 		.join("\n");
+
+	return [
+		history ? `Conversation so far:\n${history}` : "",
+		`Latest user message:\n${lastUser ? messageText(lastUser) : ""}`,
+	]
+		.filter(Boolean)
+		.join("\n\n");
 }
 
 function logRunStreamEvent(sessionId: string, event: RunStreamEvent) {
-	if (event.type !== "run_item_stream_event") return;
-
-	if (event.name === "tool_called") {
-		const toolName =
-			"rawItem" in event.item &&
-			event.item.rawItem &&
-			typeof event.item.rawItem === "object" &&
-			"name" in event.item.rawItem
-				? String(event.item.rawItem.name)
-				: "tool";
-		logToolExecution(sessionId, toolName);
-		logAgentTrace(sessionId, "Supervisor", "tool_start", toolName);
+	if (event.type !== "run_item_stream_event" || event.name !== "tool_called") {
+		return;
 	}
-
-	if (event.name === "handoff_occurred") {
-		logAgentTrace(sessionId, "Supervisor", "handoff");
-	}
+	const rawItem = "rawItem" in event.item ? event.item.rawItem : null;
+	const toolName =
+		rawItem && typeof rawItem === "object" && "name" in rawItem
+			? String(rawItem.name)
+			: "tool";
+	logToolExecution(sessionId, toolName);
+	logAgentTrace(sessionId, "Drishti", "tool_start", toolName);
 }
 
-function extractFinalOutputText(runResult: {
-	finalOutput: unknown;
-}): string {
-	const out = runResult.finalOutput;
-	if (typeof out === "string") return out;
-	if (out == null) return "";
-	return JSON.stringify(out, null, 2);
-}
+type RunUsage = {
+	runContext: {
+		usage: {
+			inputTokens: number;
+			outputTokens: number;
+			totalTokens: number;
+			requests: number;
+		};
+	};
+};
 
-function toQueryUsageMetadata(runResult: {
-	runContext: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
-}): QueryUsageMetadata | null {
+function toQueryUsageMetadata(runResult: RunUsage): QueryUsageMetadata | null {
 	const usage = runResult.runContext.usage;
 	if (usage.totalTokens <= 0 && usage.requests <= 0) return null;
 
@@ -88,12 +83,10 @@ function toQueryUsageMetadata(runResult: {
 	};
 }
 
+/** Appends token usage as message metadata once the run finishes. */
 function appendQueryUsageToUiStream(
 	uiStream: ReadableStream,
-	runResult: {
-		completed: Promise<void>;
-		runContext: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
-	},
+	runResult: RunUsage & { completed: Promise<void> },
 ): ReadableStream {
 	const reader = uiStream.getReader();
 
@@ -127,122 +120,35 @@ function appendQueryUsageToUiStream(
 	});
 }
 
-async function prepareSupervisorRun(body: ChatRequestBody) {
-	const sessionId = body.sessionId ?? crypto.randomUUID();
-	const { modelConfig, memoryContext, portfolioContext, enabledSubAgents } = body;
-	const userQuery = extractTextFromMessages(body.messages);
-	const conversationContext = buildConversationContext(body.messages);
-
-	const model = createAgentModel(modelConfig);
-	const drishtiApiKey = body.drishtiApiKey?.trim();
-	if (!drishtiApiKey) {
-		throw new Error("Drishti MCP API key is required.");
-	}
-	const mcpServers = await connectMarketDataServers({
-		drishtiApiKey,
-	});
-
-	logAgentTrace(sessionId, "Supervisor", "session_start", userQuery);
-
-	const activeServers = mcpServers.active;
-	const enabledAgents: SubAgentId[] =
-		enabledSubAgents ??
-		getEnabledSubAgentIds(normalizeSubAgentPreferences());
-
-	const specialists: Partial<
-		Record<SubAgentId, Awaited<ReturnType<typeof createResearchAgent>>>
-	> = {};
-
-	if (enabledAgents.includes("research_agent")) {
-		specialists.research_agent = createResearchAgent(model, activeServers);
-	}
-	if (enabledAgents.includes("news_analyst")) {
-		specialists.news_analyst = createNewsAnalystAgent(model, activeServers);
-	}
-	if (enabledAgents.includes("market_analyst")) {
-		specialists.market_analyst = createMarketAnalystAgent(model, activeServers);
-	}
-	if (enabledAgents.includes("portfolio_agent")) {
-		specialists.portfolio_agent = createPortfolioAgent(model, activeServers);
-	}
-
-	const supervisor = createSupervisorAgent(model, activeServers, specialists, {
-		memoryContext,
-		portfolioContext,
-		enabledSubAgents: enabledAgents,
-	});
-
-	const sessionContext = [
-		memoryContext ? `User memory:\n${memoryContext}` : "",
-		portfolioContext
-			? `Configured portfolios for this session:\n${portfolioContext}`
-			: "",
-	]
-		.filter(Boolean)
-		.join("\n\n");
-
-	const prompt = [
-		sessionContext,
-		conversationContext ? `Conversation so far:\n${conversationContext}` : "",
-		`Latest user message:\n${userQuery}`,
-	]
-		.filter(Boolean)
-		.join("\n\n");
-
-	return { sessionId, supervisor, prompt, mcpServers, userQuery };
-}
-
-export async function runSupervisorChatSync(
+export async function runAgentChat(
 	body: ChatRequestBody,
 	options?: { signal?: AbortSignal },
 ) {
-	const setup = await prepareSupervisorRun(body);
+	const sessionId = body.sessionId ?? crypto.randomUUID();
+	const mcpServers = await connectMarketDataServers({
+		drishtiApiKey: body.drishtiApiKey,
+	});
 
 	try {
-		logAgentTrace(setup.sessionId, "Supervisor", "run_start");
-
-		const runResult = await run(setup.supervisor, setup.prompt, {
-			stream: false,
-			signal: options?.signal,
-		});
-
-		const text = extractFinalOutputText(runResult);
-		const queryUsage = toQueryUsageMetadata(runResult);
-
-		if (queryUsage) {
-			recordUsage(setup.sessionId, {
-				promptTokens: queryUsage.promptTokens,
-				completionTokens: queryUsage.completionTokens,
-				totalTokens: queryUsage.totalTokens,
-			});
-			logAgentTrace(
-				setup.sessionId,
-				"Supervisor",
-				"usage",
-				`${queryUsage.totalTokens} tokens`,
-			);
+		if (mcpServers.active.length === 0) {
+			for (const [server, error] of mcpServers.errors) {
+				console.error(`[chat] MCP server '${server.name}' failed:`, error);
+			}
+			throw new DrishtiConnectionError();
 		}
 
-		return {
-			text,
-			usage: queryUsage,
-			sessionId: setup.sessionId,
-		};
-	} finally {
-		await setup.mcpServers.close();
-	}
-}
+		const agent = createDrishtiAgent(
+			createAgentModel(body.modelConfig),
+			mcpServers.active,
+			{
+				memoryContext: body.memoryContext,
+				portfolioContext: body.portfolioContext,
+			},
+		);
 
-export async function runSupervisorChat(
-	body: ChatRequestBody,
-	options?: { signal?: AbortSignal },
-) {
-	const setup = await prepareSupervisorRun(body);
+		logAgentTrace(sessionId, "Drishti", "run_start");
 
-	try {
-		logAgentTrace(setup.sessionId, "Supervisor", "run_start");
-
-		const runResult = await run(setup.supervisor, setup.prompt, {
+		const runResult = await run(agent, buildPrompt(body.messages), {
 			stream: true,
 			signal: options?.signal,
 		});
@@ -254,7 +160,7 @@ export async function runSupervisorChat(
 					async start(controller) {
 						try {
 							for await (const event of inner) {
-								logRunStreamEvent(setup.sessionId, event);
+								logRunStreamEvent(sessionId, event);
 								controller.enqueue(event);
 							}
 							controller.close();
@@ -267,36 +173,29 @@ export async function runSupervisorChat(
 		} as AiSdkUiMessageStreamSource;
 
 		const uiStream = createAiSdkUiMessageStream(observedStreamSource);
-		const streamWithUsage = appendQueryUsageToUiStream(uiStream, runResult);
 
 		const response = createUIMessageStreamResponse({
-			stream: streamWithUsage,
-			headers: {
-				"X-Session-Id": setup.sessionId,
-			},
+			stream: appendQueryUsageToUiStream(uiStream, runResult),
+			headers: { "X-Session-Id": sessionId },
 		});
 
 		void runResult.completed
 			.then(() => {
 				const queryUsage = toQueryUsageMetadata(runResult);
 				if (!queryUsage) return;
-				recordUsage(setup.sessionId, {
-					promptTokens: queryUsage.promptTokens,
-					completionTokens: queryUsage.completionTokens,
-					totalTokens: queryUsage.totalTokens,
-				});
+				recordUsage(sessionId, queryUsage);
 				logAgentTrace(
-					setup.sessionId,
-					"Supervisor",
+					sessionId,
+					"Drishti",
 					"usage",
 					`${queryUsage.totalTokens} tokens`,
 				);
 			})
 			.catch(() => undefined);
 
-		return { response, cleanup: () => setup.mcpServers.close() };
+		return { response, cleanup: () => mcpServers.close() };
 	} catch (error) {
-		await setup.mcpServers.close();
+		await mcpServers.close();
 		throw error;
 	}
 }
