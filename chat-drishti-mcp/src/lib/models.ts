@@ -48,6 +48,9 @@ export function isValidModelForProvider(
 	return trimmed.length > 0;
 }
 
+/** Default model: DeepSeek V4 Flash on OpenRouter (fast, cheap, supports tool calls). */
+export const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash";
+
 export function resolveModelForProvider(
 	provider: ModelProviderId,
 	currentModel: string,
@@ -71,7 +74,7 @@ export function resolveModelForProvider(
 	}
 
 	return provider === "openrouter"
-		? "google/gemini-2.5-flash"
+		? DEFAULT_OPENROUTER_MODEL
 		: provider === "openai"
 			? "gpt-4.1"
 			: provider === "anthropic"

@@ -21,6 +21,8 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000). The app asks for your AI model key once, and then you can start chatting.
 
+> **About speed:** how fast and how good the answers are depends mostly on the AI model you pick. Drishti MCP only supplies the market data. The default model is DeepSeek V4 Flash; if answers feel slow, try another model in **Settings**.
+
 > If you leave `DRISHTI_API_KEY` empty, the app also asks for a Drishti key. Setting it in `.env` is easier for demos: people only need an AI model key.
 
 ## Things to try
