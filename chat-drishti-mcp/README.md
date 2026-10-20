@@ -25,24 +25,34 @@ Open [http://localhost:3000](http://localhost:3000). The app asks for your AI mo
 
 > If you leave `DRISHTI_API_KEY` empty, the app also asks for a Drishti key. Setting it in `.env` is easier for demos: people only need an AI model key.
 
-## Things to try
+## What you can ask
 
-Click a suggestion in the app, or type:
+Click a suggestion in the sidebar, or type your own question.
 
-- "How did the Indian market do today?"
-- "What is the latest news and exchange filings for Reliance Industries?"
-- "Which companies are announcing their quarterly results this week?"
-- "What did Infosys management say in their latest earnings call?"
-- "How is the banking sector doing?"
-- "Which stocks are trading near their 52-week high?"
+| What | Try asking |
+|------|-----------|
+| Market summary | "How did the Indian market do today?" |
+| Why a stock moved | "Which large-cap stock moved the most today, and why?" |
+| Unusual volume | "Which stocks have unusually high trading volume today?" |
+| Block deals | "Show the biggest block deals of the last week." |
+| Company news & filings | "What is the latest news and exchange filings for Reliance Industries?" |
+| Results, with source pages | "Compare the latest quarterly results of HDFC Bank and ICICI Bank." |
+| Earnings calls | "What did Infosys management say in their latest earnings call?" |
+| Theme discovery | "Which companies talked about capacity expansion in their latest earnings calls?" |
+| Results calendar | "Which companies are announcing their quarterly results this week?" |
+| Corporate actions | "List dividends, buybacks, bonus issues and stock splits from the last 7 days." |
+| Red flags | "Any red flags in Nifty 50 companies in the last 30 days?" |
+| Your portfolio | Add holdings in **Settings → Portfolio**, then click it under **My stocks**. |
 
-**Your portfolio:** open **Settings → Portfolio**, add a few holdings, then ask "How is my portfolio doing?".
+Answers link to the original exchange filing or results page where Drishti has one.
+
+**Not available from Drishti:** screens on ratios like PE or ROE, technical indicators like RSI or MACD, and trading. For push alerts (Telegram etc.), see the other templates in this repo: `drishti-telegram-channel`, `indian-earnings-monitor`, `corporate-action-lifecycle-monitor`, `order-win-tracker`.
 
 ## Settings (`.env`)
 
 | Variable | Needed? | What it does |
 |----------|---------|--------------|
-| `DRISHTI_API_KEY` | Recommended | Drishti key used for everyone. If empty, each user adds their own in the app. |
+| `DRISHTI_API_KEY` | Recommended | Drishti key used for everyone. If empty, each user adds their own in the app. When set, source links go through `/api/citation/...` so the key never reaches the browser. |
 | `API_KEY_ENCRYPTION_SECRET` | In production | Encrypts the API keys users save in their browser. Any long random string. |
 | `DRISHTI_MCP_URL` | No | Defaults to `https://mcp.drishti.manasija.in`. |
 
