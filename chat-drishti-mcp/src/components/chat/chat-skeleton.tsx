@@ -51,7 +51,7 @@ function SidebarSkeleton() {
 
 export function ChatShellSkeleton() {
 	return (
-		<div className="flex h-screen flex-col" data-slot="chat-skeleton">
+		<div className="flex h-dvh flex-col" data-slot="chat-skeleton">
 			<div className="flex flex-1 overflow-hidden">
 				<SidebarSkeleton />
 				<div className="flex min-h-0 flex-1 flex-col bg-background">

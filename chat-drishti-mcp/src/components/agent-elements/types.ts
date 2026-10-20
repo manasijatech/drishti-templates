@@ -166,6 +166,12 @@ export type AgentChatProps = {
   /** Extra controls rendered to the right of the input toolbar */
   inputRightActions?: React.ReactNode;
 
+  /**
+   * Put text in the input box without sending it. Bump `signal` to apply the
+   * same text again.
+   */
+  prefill?: { text: string; signal: number };
+
   /** Disable the input (e.g. missing API key) */
   inputDisabled?: boolean;
 
