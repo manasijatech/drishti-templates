@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import { Streamdown } from "streamdown";
 import { createCodePlugin } from "@streamdown/code";
+import { getStepDetail, getStepLabel } from "../utils/drishti-labels";
 import { getToolStatus, areToolPropsEqual } from "../utils/format-tool";
 import type { McpToolInfo } from "./tool-registry";
 import { ToolRowBase } from "./tool-row-base";
@@ -26,73 +27,6 @@ const PRIORITY_ARGS = [
   "summary",
   "title",
 ];
-
-const ACTIVE_VERBS: Record<string, string> = {
-  List: "Listing",
-  Get: "Getting",
-  Create: "Creating",
-  Update: "Updating",
-  Delete: "Deleting",
-  Search: "Searching",
-  Fetch: "Fetching",
-  Retrieve: "Retrieving",
-  Send: "Sending",
-  Generate: "Generating",
-  Add: "Adding",
-  Remove: "Removing",
-  Modify: "Modifying",
-  Draft: "Drafting",
-  Manage: "Managing",
-  Query: "Querying",
-  Start: "Starting",
-  Set: "Setting",
-  Check: "Checking",
-  Find: "Finding",
-};
-
-const COMPLETED_VERBS: Record<string, string> = {
-  List: "Listed",
-  Get: "Got",
-  Create: "Created",
-  Update: "Updated",
-  Delete: "Deleted",
-  Search: "Searched",
-  Fetch: "Fetched",
-  Retrieve: "Retrieved",
-  Send: "Sent",
-  Generate: "Generated",
-  Add: "Added",
-  Remove: "Removed",
-  Modify: "Modified",
-  Draft: "Drafted",
-  Manage: "Managed",
-  Query: "Queried",
-  Start: "Started",
-  Set: "Set",
-  Check: "Checked",
-  Find: "Found",
-};
-
-function getActiveTitle(info: McpToolInfo): string {
-  const words = info.displayName.split(" ");
-  const verb = words[0] ?? "";
-  const rest = words.slice(1).join(" ");
-  const active = ACTIVE_VERBS[verb];
-  if (active) return rest ? `${active} ${rest}` : active;
-  return info.displayName;
-}
-
-function getCompletedTitle(info: McpToolInfo): string {
-  const words = info.displayName.split(" ");
-  const verb = words[0] ?? "";
-  const rest = words.slice(1).join(" ");
-  const completed = COMPLETED_VERBS[verb];
-  return completed
-    ? rest
-      ? `${completed} ${rest}`
-      : completed
-    : info.displayName;
-}
 
 const INPUT_LABELS: Record<string, string> = {
   query: "Query",
@@ -148,29 +82,6 @@ export function extractPrimaryInput(input: unknown): PrimaryInput | null {
     label: INPUT_LABELS[key] ?? key.replace(/_/g, " "),
     value: stringifyInputValue(value),
   };
-}
-
-function formatMcpArgs(input: any): string {
-  const primary = extractPrimaryInput(input);
-  if (primary) {
-    const display =
-      primary.value.length > 50
-        ? `${primary.value.slice(0, 47)}...`
-        : primary.value;
-    return display;
-  }
-
-  const entries = sortInputEntries(getInputEntries(input));
-  if (entries.length === 0) return "";
-
-  const parts: string[] = [];
-  for (const [key, value] of entries) {
-    if (parts.length >= 2) break;
-    const val = stringifyInputValue(value);
-    const display = val.length > 30 ? `${val.slice(0, 27)}...` : val;
-    parts.push(`${key}: ${display}`);
-  }
-  return parts.join("  ");
 }
 
 function formatInputForDisplay(input: unknown): string | null {
@@ -252,12 +163,11 @@ export const McpTool = memo(function McpTool({
 }: McpToolProps) {
   const { isPending, isInterrupted } = getToolStatus(part, chatStatus);
 
-  const title = useMemo(() => {
-    if (part.state === "input-streaming")
-      return `Preparing ${mcpInfo.displayName}`;
-    if (isPending) return getActiveTitle(mcpInfo);
-    return getCompletedTitle(mcpInfo);
-  }, [part.state, isPending, mcpInfo]);
+  const title = useMemo(
+    () =>
+      getStepLabel(mcpInfo.toolName, isPending || part.state === "input-streaming"),
+    [part.state, isPending, mcpInfo.toolName],
+  );
 
   const primaryInput = useMemo(
     () => extractPrimaryInput(part.input),
@@ -266,8 +176,8 @@ export const McpTool = memo(function McpTool({
 
   const subtitle = useMemo(() => {
     if (part.state === "input-streaming") return "";
-    return formatMcpArgs(part.input);
-  }, [part.input, part.state]);
+    return getStepDetail(part);
+  }, [part]);
 
   const inputJson = useMemo(
     () => formatInputForDisplay(part.input),
@@ -303,7 +213,7 @@ export const McpTool = memo(function McpTool({
   if (isInterrupted && !part.output) {
     return (
       <span className="text-sm text-an-tool-color-muted">
-        {mcpInfo.displayName} interrupted
+        {getStepLabel(mcpInfo.toolName, false)} (stopped)
       </span>
     );
   }

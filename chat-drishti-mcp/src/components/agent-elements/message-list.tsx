@@ -14,11 +14,16 @@ import { UserMessage } from "./user-message";
 import { Markdown } from "./markdown";
 import { ErrorMessage } from "./error-message";
 import type { CustomToolRendererProps } from "./types";
-import { ToolRowBase } from "./tools/tool-row-base";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
 import { ToolRenderer as DefaultToolRenderer } from "./tools/tool-renderer";
+import { ResearchSteps } from "./tools/research-steps";
 import { normalizeAssistantToolParts } from "./utils/tool-part-normalizer";
-import { SpiralLoader } from "./spiral-loader";
+import {
+  getDrishtiOperation,
+  getStepDetail,
+  getStepLabel,
+} from "./utils/drishti-labels";
+import { LiveActivity } from "./live-activity";
 
 export type MessageListProps = {
   messages: UIMessage[];
@@ -105,6 +110,39 @@ function getLastAssistantHasContent(messages: UIMessage[]) {
     });
   }
   return false;
+}
+
+function isToolDone(part: ToolPartBase): boolean {
+  return part.state === "output-available" || part.state === "output-error";
+}
+
+/**
+ * What the agent is doing right now, for the live status line. Returns null
+ * while answer text is streaming (the text itself shows progress).
+ */
+function getLiveActivity(
+  messages: UIMessage[],
+): { label: string; detail?: string } | null {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") {
+    return { label: "Reading your question" };
+  }
+  const parts = normalizeAssistantToolParts(last.parts ?? []) as unknown[];
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i];
+    if (isTextPart(part)) {
+      if (part.text.trim()) return null;
+      continue;
+    }
+    if (isV5ToolPart(part)) {
+      if (isToolDone(part)) return { label: "Thinking about the next step" };
+      return {
+        label: getStepLabel(getDrishtiOperation(part), true),
+        detail: getStepDetail(part) || undefined,
+      };
+    }
+  }
+  return { label: "Reading your question" };
 }
 
 function getLastUserMessageId(messages: UIMessage[]) {
@@ -454,7 +492,16 @@ export const MessageList = memo(function MessageList({
     scrollToBottomInstant();
   }, [messages, isStreaming, scrollToBottomInstant]);
 
-  const planningLabel = "Processing...";
+  const runStartedAtRef = useRef<number | null>(null);
+  if (isStreaming && runStartedAtRef.current === null) {
+    runStartedAtRef.current = Date.now();
+  } else if (!isStreaming) {
+    runStartedAtRef.current = null;
+  }
+  const liveActivity = useMemo(
+    () => (isStreaming ? getLiveActivity(normalizedMessages) : null),
+    [isStreaming, normalizedMessages],
+  );
   const turns = useMemo(
     () => groupMessagesIntoTurns(normalizedMessages),
     [normalizedMessages],
@@ -613,12 +660,11 @@ export const MessageList = memo(function MessageList({
                     );
                   })()}
 
-                {isLastTurn && showPlanning && (
-                  <ToolRowBase
-                    icon={<SpiralLoader size={12} />}
-                    shimmerLabel={planningLabel}
-                    completeLabel="Done"
-                    isAnimating={true}
+                {isLastTurn && liveActivity && runStartedAtRef.current && (
+                  <LiveActivity
+                    detail={liveActivity.detail}
+                    label={liveActivity.label}
+                    startedAt={runStartedAtRef.current}
                   />
                 )}
               </div>
@@ -726,33 +772,53 @@ function AssistantParts({
       }
 
       if (isV5ToolPart(part)) {
-        if (suppressQuestionTool && part.type === "tool-Question") {
-          i++;
-          continue;
-        }
-        if (part.toolCallId && nestedToolIds.has(part.toolCallId)) {
-          i++;
-          continue;
-        }
-
         const chatStreamingStatus =
           isLast && isStreaming ? "streaming" : undefined;
-        const toolCallId = part.toolCallId;
-        const nestedTools =
-          (part.type === "tool-Task" || part.type === "tool-Agent") &&
-          toolCallId
-            ? nestedToolsMap.get(toolCallId) || []
-            : undefined;
-        elems.push(
-          <ToolRendererComponent
-            key={part.toolCallId ?? `${msg.id}-tool-${i}`}
-            part={part}
-            nestedTools={nestedTools}
-            chatStatus={chatStreamingStatus}
-            toolRenderers={toolRenderers}
-          />,
-        );
-        i++;
+        const steps: { key: string; node: React.ReactNode; failed: boolean }[] =
+          [];
+        const groupStart = i;
+
+        // Collect this run of consecutive tool calls into one group.
+        while (i < parts.length && isV5ToolPart(parts[i])) {
+          const step = parts[i] as ToolPartBase;
+          const skip =
+            step.type === "tool-TaskOutput" ||
+            (suppressQuestionTool && step.type === "tool-Question") ||
+            (step.toolCallId !== undefined && nestedToolIds.has(step.toolCallId));
+          if (!skip) {
+            const toolCallId = step.toolCallId;
+            const nestedTools =
+              (step.type === "tool-Task" || step.type === "tool-Agent") &&
+              toolCallId
+                ? nestedToolsMap.get(toolCallId) || []
+                : undefined;
+            steps.push({
+              key: step.toolCallId ?? `${msg.id}-tool-${i}`,
+              failed: step.state === "output-error",
+              node: (
+                <ToolRendererComponent
+                  chatStatus={chatStreamingStatus}
+                  nestedTools={nestedTools}
+                  part={step}
+                  toolRenderers={toolRenderers}
+                />
+              ),
+            });
+          }
+          i++;
+        }
+
+        if (steps.length === 1) {
+          elems.push(<div key={steps[0]!.key}>{steps[0]!.node}</div>);
+        } else if (steps.length > 1) {
+          elems.push(
+            <ResearchSteps
+              isRunning={isLast && isStreaming && i >= parts.length}
+              key={`${msg.id}-steps-${groupStart}`}
+              steps={steps}
+            />,
+          );
+        }
         continue;
       }
 
