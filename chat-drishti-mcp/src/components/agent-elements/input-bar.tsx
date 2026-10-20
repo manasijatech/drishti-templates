@@ -561,6 +561,7 @@ export const InputBar = memo(function InputBar({
                 {/* Send / Stop button */}
                 <button
                   type="button"
+                  data-sfx={isStreaming ? undefined : "off"}
                   aria-label={
                     isStreaming ? "Stop generating" : "Send message"
                   }

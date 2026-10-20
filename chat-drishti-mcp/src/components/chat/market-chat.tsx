@@ -24,7 +24,7 @@ import {
 	getLastQueryUsageFromMessages,
 	sumQueryUsageFromMessages,
 } from "~/lib/query-usage-message";
-import { playCue } from "~/lib/sound";
+import { playCue, startSoundEffects } from "~/lib/sound";
 import {
 	portfolioToContext,
 	useChatStore,
@@ -237,7 +237,7 @@ export function MarketChat({
 				openSettings();
 				return;
 			}
-			playCue("tap");
+			playCue("tap", "strong");
 			void sendMessage({ text: prompt });
 		},
 		[canChat, openSettings, sendMessage],
@@ -247,6 +247,8 @@ export function MarketChat({
 	const pickPrompt = useCallback((prompt: string) => {
 		setPrefill((current) => ({ text: prompt, signal: current.signal + 1 }));
 	}, []);
+
+	useEffect(() => startSoundEffects(), []);
 
 	// Sound cue when an answer finishes or fails, so a long run is never silent.
 	const prevStatusRef = useRef(status);
