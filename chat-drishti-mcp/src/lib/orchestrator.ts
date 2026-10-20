@@ -15,6 +15,12 @@ import { connectMarketDataServers } from "~/mcp/registry";
 import { createAgentModel } from "~/providers";
 import type { ChatRequestBody, QueryUsageMetadata } from "~/types";
 
+/**
+ * Each tool call is a model turn. The SDK default (10) is too low for answers
+ * that look up many stocks, such as explaining every top mover.
+ */
+const MAX_TURNS = 30;
+
 /** Thrown when the Drishti MCP server cannot be reached (usually a bad API key). */
 export class DrishtiConnectionError extends Error {
 	constructor() {
@@ -151,6 +157,7 @@ export async function runAgentChat(
 		const runResult = await run(agent, buildPrompt(body.messages), {
 			stream: true,
 			signal: options?.signal,
+			maxTurns: MAX_TURNS,
 		});
 
 		const observedStreamSource = {

@@ -7,6 +7,7 @@ import {
 	Cpu,
 	Eye,
 	EyeSlash,
+	ShieldCheck,
 	SpeakerHigh,
 	Trash,
 } from "@phosphor-icons/react";
@@ -549,6 +550,13 @@ export function ChatConfigPanelContent({
 					Saved stocks show under{" "}
 					<span className="font-medium text-foreground">My stocks</span> in the
 					sidebar. Click one for a briefing.
+				</p>
+				<p className="flex items-start gap-1.5 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground leading-snug">
+					<ShieldCheck className="mt-px size-3.5 shrink-0 text-emerald-600" />
+					<span>
+						Saved only in this browser. Drishti only receives stock symbols,
+						never names or amounts.
+					</span>
 				</p>
 
 				<div className="space-y-2">

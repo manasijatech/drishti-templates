@@ -177,9 +177,9 @@ export function filterSessions(
 }
 
 export const DEMO_PROMPT_GROUPS = [
-	"Market",
-	"F&O watch",
-	"Companies",
+	"Market pulse",
+	"Results & filings",
+	"Risk & F&O",
 	"For clients",
 ] as const;
 
@@ -196,32 +196,102 @@ export const DEMO_PROMPTS: {
 	prompt: string;
 }[] = [
 	{
-		group: "Market",
+		group: "Market pulse",
+		icon: "movers",
+		label: "Movers, explained",
+		prompt:
+			"Show today's top gainers and losers among large and mid caps, with one line on why each one moved.",
+	},
+	{
+		group: "Results & filings",
+		icon: "earnings",
+		label: "Blockbuster & weak results",
+		prompt:
+			"Which companies reported the strongest and weakest quarterly results in the last 2 days? Show revenue and profit growth in a table.",
+	},
+	{
+		group: "Risk & F&O",
+		icon: "risk",
+		label: "Risk check: my portfolio",
+		prompt:
+			"Run a risk check on my portfolio: upcoming results, negative news and red-flag filings. Rank by how urgent each one is.",
+	},
+	{
+		group: "Market pulse",
+		icon: "news",
+		label: "News to affected stocks",
+		prompt:
+			"Which listed Indian companies could be affected by the latest Starlink and satellite internet news? Show the sentiment.",
+	},
+	{
+		group: "For clients",
+		icon: "chat",
+		label: "Push notifications",
+		prompt:
+			"Draft 3 to 5 push notifications for clients about today's most important market developments.",
+	},
+	{
+		group: "Results & filings",
+		icon: "briefcase",
+		label: "Order wins",
+		prompt:
+			"Show the biggest order wins announced in the last 3 days, with order size, client and execution timeline.",
+	},
+	{
+		group: "Market pulse",
 		icon: "chart",
 		label: "Morning note",
 		prompt:
 			"Give me today's morning note: global cues, GIFT Nifty, and the key company news to watch.",
 	},
 	{
-		group: "F&O watch",
+		group: "Market pulse",
+		icon: "bank",
+		label: "Volume spikes",
+		prompt:
+			"Which stocks have unusually high trading volume today? Is there news or a filing behind it?",
+	},
+	{
+		group: "Results & filings",
+		icon: "sector",
+		label: "Infosys earnings call",
+		prompt:
+			"What did Infosys management say in their latest earnings call? Include guidance and key numbers.",
+	},
+	{
+		group: "Results & filings",
+		icon: "compare",
+		label: "HDFC Bank vs ICICI Bank",
+		prompt:
+			"Compare the latest quarterly results of HDFC Bank and ICICI Bank in a table: revenue, profit and growth.",
+	},
+	{
+		group: "Risk & F&O",
 		icon: "calendar",
 		label: "Bank Nifty event risk",
 		prompt:
 			"Which Bank Nifty stocks have results or board meetings in the next two weeks?",
 	},
 	{
-		group: "Companies",
+		group: "Risk & F&O",
 		icon: "swing",
-		label: "Why did it move?",
+		label: "Negative news: Bank Nifty",
 		prompt:
-			"Which large-cap stock moved the most today, and why? Check its news and exchange filings.",
+			"Any negative news on Bank Nifty stocks in the last 7 days? Summarise the risk for each bank.",
 	},
 	{
-		group: "Companies",
-		icon: "earnings",
-		label: "Infosys earnings call",
+		group: "Risk & F&O",
+		icon: "screener",
+		label: "Red flags in Nifty 50",
 		prompt:
-			"What did Infosys management say in their latest earnings call? Include guidance and key numbers.",
+			"Any red flags in Nifty 50 companies in the last 30 days, like penalties, litigation, credit rating changes or regulator inspections?",
+	},
+	{
+		group: "For clients",
+		icon: "portfolio",
+		label: "Weekly portfolio summary",
+		prompt:
+			"Give me a weekly summary of my portfolio and watchlists: what changed in filings, news, results and prices this week.",
 	},
 	{
 		group: "For clients",
@@ -235,60 +305,5 @@ export const DEMO_PROMPTS: {
 		icon: "chat",
 		label: "Market update in Gujarati",
 		prompt: "Give me today's market update in Gujarati.",
-	},
-	{
-		group: "Market",
-		icon: "movers",
-		label: "Volume spikes",
-		prompt:
-			"Which stocks have unusually high trading volume today? Is there news or a filing behind it?",
-	},
-	{
-		group: "Market",
-		icon: "bank",
-		label: "Block deals",
-		prompt: "Show the biggest block deals of the last week.",
-	},
-	{
-		group: "F&O watch",
-		icon: "risk",
-		label: "Negative news: Bank Nifty",
-		prompt:
-			"Any negative news on Bank Nifty stocks in the last 7 days? Summarise the risk for each bank.",
-	},
-	{
-		group: "F&O watch",
-		icon: "news",
-		label: "Nifty 50 important filings",
-		prompt:
-			"Show important exchange filings from Nifty 50 companies in the last 3 days.",
-	},
-	{
-		group: "Companies",
-		icon: "compare",
-		label: "HDFC Bank vs ICICI Bank",
-		prompt:
-			"Compare the latest quarterly results of HDFC Bank and ICICI Bank in a table: revenue, profit and growth.",
-	},
-	{
-		group: "Companies",
-		icon: "sector",
-		label: "Who is expanding?",
-		prompt:
-			"Which companies talked about capacity expansion or new capex in their latest earnings calls?",
-	},
-	{
-		group: "For clients",
-		icon: "portfolio",
-		label: "Client portfolio review",
-		prompt:
-			"Brief me on my portfolio: what changed in filings, news, results, block deals and prices?",
-	},
-	{
-		group: "For clients",
-		icon: "dividend",
-		label: "Dividends & buybacks",
-		prompt:
-			"List dividends, buybacks, bonus issues and stock splits announced in the last 7 days.",
 	},
 ];
