@@ -7,12 +7,6 @@ export const env = createEnv({
 	 * isn't built with invalid env vars.
 	 */
 	server: {
-		BETTER_AUTH_SECRET:
-			process.env.NODE_ENV === "production"
-				? z.string()
-				: z.string().optional(),
-		BETTER_AUTH_GITHUB_CLIENT_ID: z.string().optional(),
-		BETTER_AUTH_GITHUB_CLIENT_SECRET: z.string().optional(),
 		DRISHTI_API_KEY: z.string().optional(),
 		DRISHTI_MCP_URL: z.string().url().optional(),
 		API_KEY_ENCRYPTION_SECRET: z.string().optional(),
@@ -35,10 +29,6 @@ export const env = createEnv({
 	 * middlewares) or client-side so we need to destruct manually.
 	 */
 	runtimeEnv: {
-		BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
-		BETTER_AUTH_GITHUB_CLIENT_ID: process.env.BETTER_AUTH_GITHUB_CLIENT_ID,
-		BETTER_AUTH_GITHUB_CLIENT_SECRET:
-			process.env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
 		DRISHTI_API_KEY: process.env.DRISHTI_API_KEY,
 		DRISHTI_MCP_URL: process.env.DRISHTI_MCP_URL,
 		API_KEY_ENCRYPTION_SECRET: process.env.API_KEY_ENCRYPTION_SECRET,

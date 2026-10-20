@@ -1,19 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { resolveModelForProvider } from "~/lib/models";
-import { MODEL_COMPARE_MAX } from "~/lib/model-compare";
-import { toCatalogModelId } from "~/lib/openrouter-models-core";
 import { portfolioToContext } from "~/lib/portfolio-context";
-import {
-	DEFAULT_SUB_AGENT_PREFERENCES,
-	normalizeSubAgentPreferences,
-} from "~/lib/sub-agents";
 import type {
 	ChatSession,
 	EncryptedApiKeyCredential,
 	EncryptedModelConfig,
 	LongTermMemory,
-	ModelCompareTarget,
 	ModelConfig,
 	ModelProviderId,
 	Portfolio,
@@ -32,7 +25,9 @@ async function encryptApiKeyViaServer(apiKey: string) {
 		const data = (await response.json().catch(() => null)) as {
 			error?: string;
 		} | null;
-		throw new Error(data?.error ?? "Failed to encrypt API key on server.");
+		throw new Error(
+			data?.error ?? "Could not save the API key. Please try again.",
+		);
 	}
 
 	return response.json() as Promise<{ encryptedApiKey: string; iv: string }>;
@@ -58,8 +53,6 @@ interface ModelStore {
 	configs: EncryptedModelConfig[];
 	drishtiApiKey: EncryptedApiKeyCredential | null;
 	onboardingStatus: OnboardingStatus;
-	compareMode: boolean;
-	compareModels: ModelCompareTarget[];
 	setActiveModel: (provider: ModelProviderId, model: string) => void;
 	setActiveProvider: (provider: ModelProviderId) => void;
 	saveConfig: (config: ModelConfig) => Promise<void>;
@@ -67,15 +60,11 @@ interface ModelStore {
 	removeApiKey: (provider: ModelProviderId) => void;
 	removeDrishtiApiKey: () => void;
 	getActiveEncryptedConfig: () => EncryptedModelConfig | null;
-	getEncryptedConfigForTarget: (target: ModelCompareTarget) => EncryptedModelConfig | null;
 	getEncryptedDrishtiApiKey: () => EncryptedApiKeyCredential | null;
 	hasStoredApiKey: (provider?: ModelProviderId) => boolean;
 	hasStoredDrishtiApiKey: () => boolean;
 	completeOnboarding: () => void;
 	skipOnboarding: () => void;
-	setCompareMode: (enabled: boolean) => void;
-	toggleCompareModel: (target: ModelCompareTarget) => void;
-	setCompareModels: (targets: ModelCompareTarget[]) => void;
 }
 
 export const useModelStore = create<ModelStore>()(
@@ -86,11 +75,6 @@ export const useModelStore = create<ModelStore>()(
 			configs: [],
 			drishtiApiKey: null,
 			onboardingStatus: "pending",
-			compareMode: false,
-			compareModels: [
-				{ provider: "openrouter", model: "google/gemini-2.5-flash" },
-				{ provider: "openrouter", model: "anthropic/claude-sonnet-4" },
-			],
 
 			setActiveModel: (provider, model) =>
 				set({ activeProvider: provider, activeModel: model }),
@@ -118,7 +102,7 @@ export const useModelStore = create<ModelStore>()(
 					encryptedApiKey = encrypted.encryptedApiKey;
 					iv = encrypted.iv;
 				} else if (config.provider !== "ollama" && !encryptedApiKey) {
-					throw new Error("API key is required.");
+					throw new Error("Enter your API key first.");
 				}
 
 				set((state) => {
@@ -152,7 +136,7 @@ export const useModelStore = create<ModelStore>()(
 			saveDrishtiApiKey: async (apiKey) => {
 				const trimmed = apiKey.trim();
 				if (!trimmed) {
-					throw new Error("Enter a Drishti MCP API key before saving.");
+					throw new Error("Enter your Drishti API key first.");
 				}
 				const encrypted = await encryptApiKeyViaServer(trimmed);
 				set({
@@ -172,12 +156,6 @@ export const useModelStore = create<ModelStore>()(
 				return { ...entry, model: activeModel };
 			},
 
-			getEncryptedConfigForTarget: (target) => {
-				const entry = get().configs.find((c) => c.provider === target.provider);
-				if (!entry) return null;
-				return { ...entry, model: target.model };
-			},
-
 			getEncryptedDrishtiApiKey: () => get().drishtiApiKey,
 
 			hasStoredApiKey: (provider) => {
@@ -193,36 +171,6 @@ export const useModelStore = create<ModelStore>()(
 			completeOnboarding: () => set({ onboardingStatus: "completed" }),
 
 			skipOnboarding: () => set({ onboardingStatus: "skipped" }),
-
-			setCompareMode: (enabled) => set({ compareMode: enabled }),
-
-			toggleCompareModel: (target) =>
-				set((state) => {
-					const normalized = {
-						provider: target.provider,
-						model: toCatalogModelId(target.provider, target.model),
-					};
-					const key = `${normalized.provider}:${normalized.model}`;
-					const exists = state.compareModels.some(
-						(entry) =>
-							`${entry.provider}:${toCatalogModelId(entry.provider, entry.model)}` ===
-							key,
-					);
-					if (exists) {
-						return {
-							compareModels: state.compareModels.filter(
-								(entry) =>
-									`${entry.provider}:${toCatalogModelId(entry.provider, entry.model)}` !==
-									key,
-							),
-						};
-					}
-					if (state.compareModels.length >= MODEL_COMPARE_MAX) return state;
-					return { compareModels: [...state.compareModels, normalized] };
-				}),
-
-			setCompareModels: (targets) =>
-				set({ compareModels: targets.slice(0, MODEL_COMPARE_MAX) }),
 		}),
 		{
 			name: "drishti-model-config",
@@ -245,7 +193,9 @@ export const useModelStore = create<ModelStore>()(
 							c.provider === state.activeProvider &&
 							Boolean(c.encryptedApiKey?.trim()),
 					);
-				const hasDrishtiKey = Boolean(state.drishtiApiKey?.encryptedApiKey?.trim());
+				const hasDrishtiKey = Boolean(
+					state.drishtiApiKey?.encryptedApiKey?.trim(),
+				);
 
 				if (!state.onboardingStatus) {
 					state.onboardingStatus =
@@ -270,7 +220,6 @@ interface MemoryStore extends LongTermMemory {
 
 const defaultPreferences: UserPreferences = {
 	favoriteSectors: [],
-	subAgents: DEFAULT_SUB_AGENT_PREFERENCES,
 };
 
 export const useMemoryStore = create<MemoryStore>()(
@@ -347,13 +296,6 @@ export const useMemoryStore = create<MemoryStore>()(
 		}),
 		{
 			name: "drishti-memory",
-			onRehydrateStorage: () => (state) => {
-				if (!state) return;
-				state.preferences = {
-					...state.preferences,
-					subAgents: normalizeSubAgentPreferences(state.preferences.subAgents),
-				};
-			},
 		},
 	),
 );

@@ -18,12 +18,14 @@ export function ChatConfigSheet({
 	focusSignal = 0,
 	focusTarget = "model",
 	showTrigger = true,
+	serverHasDrishtiKey = false,
 }: {
 	open?: boolean;
 	onOpenChange?: (open: boolean) => void;
 	focusSignal?: number;
 	focusTarget?: ConfigFocusTarget;
 	showTrigger?: boolean;
+	serverHasDrishtiKey?: boolean;
 }) {
 	return (
 		<Sheet onOpenChange={onOpenChange} open={open}>
@@ -31,7 +33,7 @@ export function ChatConfigSheet({
 				<SheetTrigger
 					render={
 						<Button
-							aria-label="Open configuration"
+							aria-label="Open settings"
 							size="icon"
 							variant="outline"
 						/>
@@ -42,7 +44,7 @@ export function ChatConfigSheet({
 			) : null}
 			<SheetContent className="flex w-full min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md" side="right">
 				<SheetHeader className="shrink-0 border-border border-b px-4 py-3">
-					<SheetTitle>Configuration</SheetTitle>
+					<SheetTitle>Settings</SheetTitle>
 				</SheetHeader>
 				<ScrollArea className="min-h-0 flex-1">
 					<ChatConfigPanelContent
@@ -50,6 +52,7 @@ export function ChatConfigSheet({
 						drishtiApiKeyInputId="chat-drishti-mcp-token-sheet"
 						focusSignal={focusSignal}
 						focusTarget={focusTarget}
+						serverHasDrishtiKey={serverHasDrishtiKey}
 					/>
 				</ScrollArea>
 			</SheetContent>

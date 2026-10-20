@@ -15,15 +15,16 @@ import { McpTool, unwrapMcpOutput } from "./mcp-tool";
 import { ThinkingTool } from "./thinking-tool";
 import { SearchTool } from "./search-tool";
 import { QuestionTool } from "../question/question-tool";
-import { SubagentTool } from "./subagent-tool";
 import type { CustomToolRendererProps } from "../types";
 
-const AGENT_HANDOFF_TOOL_NAMES = new Set([
-  "research_agent",
-  "news_analyst",
-  "market_analyst",
-  "portfolio_agent",
-]);
+/** Drishti MCP runs every operation through `execute_tool({ name, arguments })`. */
+function getDisplayToolName(part: any): string {
+  const toolName = typeof part.toolName === "string" ? part.toolName : "tool";
+  if (toolName === "execute_tool" && typeof part.input?.name === "string") {
+    return part.input.name;
+  }
+  return toolName;
+}
 
 export type ToolRendererProps = {
   part: any;
@@ -91,15 +92,6 @@ export const ToolRenderer = memo(function ToolRenderer({
     case "dynamic-tool": {
       const toolName =
         typeof part.toolName === "string" ? part.toolName : "tool";
-      if (AGENT_HANDOFF_TOOL_NAMES.has(toolName)) {
-        return (
-          <SubagentTool
-            part={part}
-            nestedTools={nestedTools}
-            chatStatus={chatStatus}
-          />
-        );
-      }
       if (toolRenderers?.[toolName]) {
         const CustomRenderer = toolRenderers[toolName];
         return (
@@ -114,7 +106,7 @@ export const ToolRenderer = memo(function ToolRenderer({
       return (
         <McpTool
           part={part}
-          mcpInfo={buildDynamicToolMcpInfo(toolName)}
+          mcpInfo={buildDynamicToolMcpInfo(getDisplayToolName(part))}
           chatStatus={chatStatus}
         />
       );

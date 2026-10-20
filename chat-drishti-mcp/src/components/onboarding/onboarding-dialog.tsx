@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Eye, EyeSlash, Key, Sparkle } from "@phosphor-icons/react";
+import { Eye, EyeSlash, Sparkle } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { DrishtiLogoMark, DRISHTI_CHAT_PRODUCT_NAME } from "~/components/brand/drishti-logo";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
@@ -20,15 +20,18 @@ import { isValidModelForProvider } from "~/lib/models";
 import { cn } from "~/lib/utils";
 import { useModelStore } from "~/stores";
 
-type OnboardingStep = "welcome" | "model" | "drishti" | "done";
-
-const STEPS: OnboardingStep[] = ["welcome", "model", "drishti", "done"];
+type OnboardingStep = "model" | "drishti";
 
 type OnboardingDialogProps = {
 	open: boolean;
+	/** When the server has DRISHTI_API_KEY, the Drishti step is skipped. */
+	serverHasDrishtiKey?: boolean;
 };
 
-export function OnboardingDialog({ open }: OnboardingDialogProps) {
+export function OnboardingDialog({
+	open,
+	serverHasDrishtiKey = false,
+}: OnboardingDialogProps) {
 	const {
 		activeProvider,
 		activeModel,
@@ -43,7 +46,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 		skipOnboarding,
 	} = useModelStore();
 
-	const [step, setStep] = useState<OnboardingStep>("welcome");
+	const [step, setStep] = useState<OnboardingStep>("model");
 	const [modelApiKey, setModelApiKey] = useState("");
 	const [drishtiApiKey, setDrishtiApiKey] = useState("");
 	const [showModelApiKey, setShowModelApiKey] = useState(false);
@@ -58,15 +61,15 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 		ollamaBaseUrl: baseUrl || existingConfig?.baseUrl,
 	});
 
-	const stepIndex = STEPS.indexOf(step);
+	const totalSteps = serverHasDrishtiKey ? 1 : 2;
+	const stepNumber = step === "model" ? 1 : 2;
 	const modelKeyReady =
 		activeProvider === "ollama" || hasStoredApiKey(activeProvider);
 	const drishtiKeyReady = hasStoredDrishtiApiKey();
-	const isFormStep = step === "model" || step === "drishti";
 
 	useEffect(() => {
 		if (!open) {
-			setStep("welcome");
+			setStep("model");
 			setModelApiKey("");
 			setDrishtiApiKey("");
 			setShowModelApiKey(false);
@@ -81,20 +84,16 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 		skipOnboarding();
 	};
 
-	const handleFinish = () => {
-		completeOnboarding();
-	};
-
 	const handleSaveModelStep = async () => {
 		setError(null);
 		if (!isValidModelForProvider(activeProvider, activeModel, catalogModels)) {
-			setError("Select or enter a valid model before continuing.");
+			setError("Pick a model from the list first.");
 			return;
 		}
 
 		const trimmedKey = modelApiKey.trim();
 		if (activeProvider !== "ollama" && !trimmedKey && !existingConfig?.encryptedApiKey) {
-			setError("Enter your model provider API key to continue.");
+			setError("Enter your API key to continue.");
 			return;
 		}
 
@@ -109,9 +108,13 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 				});
 			}
 			setModelApiKey("");
-			setStep("drishti");
+			if (serverHasDrishtiKey) {
+				completeOnboarding();
+			} else {
+				setStep("drishti");
+			}
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to save model configuration.");
+			setError(e instanceof Error ? e.message : "Could not save. Please try again.");
 		} finally {
 			setSaving(false);
 		}
@@ -121,13 +124,13 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 		setError(null);
 
 		if (drishtiKeyReady && !drishtiApiKey.trim()) {
-			handleFinish();
+			completeOnboarding();
 			return;
 		}
 
 		const trimmedKey = drishtiApiKey.trim();
 		if (!trimmedKey) {
-			setError("Enter your Drishti MCP API key to continue.");
+			setError("Enter your Drishti API key to continue.");
 			return;
 		}
 
@@ -135,9 +138,9 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 		try {
 			await saveDrishtiApiKey(trimmedKey);
 			setDrishtiApiKey("");
-			setStep("done");
+			completeOnboarding();
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to save Drishti API key.");
+			setError(e instanceof Error ? e.message : "Could not save. Please try again.");
 		} finally {
 			setSaving(false);
 		}
@@ -156,13 +159,13 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 			>
 				<div className="flex shrink-0 items-center justify-between gap-3 border-border border-b px-5 py-3">
 					<div className="flex flex-1 items-center gap-2">
-						{STEPS.slice(0, 3).map((item, index) => (
+						{Array.from({ length: totalSteps }, (_, index) => (
 							<div
 								className={cn(
 									"h-1.5 flex-1 rounded-full transition-colors",
-									index <= Math.min(stepIndex, 2) ? "bg-primary" : "bg-muted",
+									index < stepNumber ? "bg-primary" : "bg-muted",
 								)}
-								key={item}
+								key={index}
 							/>
 						))}
 					</div>
@@ -176,50 +179,20 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 					</Button>
 				</div>
 
-				<div
-					className={cn(
-						"min-h-0 flex-1 overflow-y-auto px-5",
-						isFormStep ? "py-4" : "py-6",
-					)}
-				>
-					{step === "welcome" ? (
-						<div className="flex flex-col items-center text-center">
-							<DrishtiLogoMark className="mb-4" size={40} />
-							<DialogHeader className="items-center gap-2 text-center">
-								<DialogTitle className="font-heading text-lg">
-									Welcome to {DRISHTI_CHAT_PRODUCT_NAME}
-								</DialogTitle>
-								<DialogDescription className="max-w-sm text-center text-balance">
-									Connect your AI model and Drishti MCP keys to start asking
-									about markets, portfolios, and news.
-								</DialogDescription>
-							</DialogHeader>
-							<ul className="mt-6 w-full max-w-sm space-y-2 text-left text-muted-foreground text-xs">
-								<li className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-									<Key className="mt-0.5 size-3.5 shrink-0 text-primary" weight="light" />
-									<span>Model provider API key for chat responses</span>
-								</li>
-								<li className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2">
-									<Sparkle className="mt-0.5 size-3.5 shrink-0 text-primary" weight="light" />
-									<span>Drishti MCP key for market data tools</span>
-								</li>
-							</ul>
-						</div>
-					) : null}
-
+				<div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
 					{step === "model" ? (
 						<div className="space-y-4">
 							<DialogHeader className="gap-1.5">
 								<div className="flex items-center gap-2 text-primary">
-									<Key className="size-4" weight="light" />
+									<DrishtiLogoMark size={18} />
 									<span className="font-medium text-xs uppercase tracking-wide">
-										Step 1 of 2
+										Step 1 of {totalSteps}
 									</span>
 								</div>
-								<DialogTitle>Model provider</DialogTitle>
+								<DialogTitle>Welcome to {DRISHTI_CHAT_PRODUCT_NAME}</DialogTitle>
 								<DialogDescription>
-									Choose your LLM provider and add an API key. Keys are encrypted
-									server-side and stored locally as ciphertext.
+									Pick the AI model that will answer questions and paste its API
+									key. The key is encrypted and saved only in this browser.
 								</DialogDescription>
 							</DialogHeader>
 
@@ -241,7 +214,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 								</div>
 								<div className="space-y-1.5">
 									<Label className="text-xs" htmlFor="onboarding-model-api-key">
-										API Key
+										API key
 										{existingConfig?.encryptedApiKey || modelKeyReady ? (
 											<span className="ml-1.5 text-emerald-600 text-xs">
 												(saved)
@@ -314,16 +287,16 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 										Step 2 of 2
 									</span>
 								</div>
-								<DialogTitle>Drishti MCP</DialogTitle>
+								<DialogTitle>Connect live market data</DialogTitle>
 								<DialogDescription>
-									Required for market data tools — news, movers, portfolio
-									analysis, and filings.
+									Paste your Drishti API key. It gives the assistant live
+									prices, news, company filings, and results.
 								</DialogDescription>
 							</DialogHeader>
 
 							<div className="space-y-1.5">
 								<Label className="text-xs" htmlFor="onboarding-drishti-api-key">
-									Drishti MCP API Key
+									Drishti API key
 									{drishtiKeyReady ? (
 										<span className="ml-1.5 text-emerald-600 text-xs">(saved)</span>
 									) : null}
@@ -338,7 +311,7 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 										placeholder={
 											drishtiKeyReady
 												? "••••••••  (saved)"
-												: "Enter Drishti MCP API key"
+												: "Enter Drishti API key"
 										}
 										type={showDrishtiApiKey ? "text" : "password"}
 										value={drishtiApiKey}
@@ -367,48 +340,23 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 						</div>
 					) : null}
 
-					{step === "done" ? (
-						<div className="flex flex-col items-center py-2 text-center">
-							<CheckCircle
-								className="mb-4 size-10 text-emerald-600"
-								weight="light"
-							/>
-							<DialogHeader className="items-center gap-2 text-center">
-								<DialogTitle>You&apos;re all set</DialogTitle>
-								<DialogDescription className="text-center text-balance">
-									{modelKeyReady && drishtiKeyReady
-										? "Both keys are saved. Start exploring the market."
-										: "You can add missing keys anytime in Configuration."}
-								</DialogDescription>
-							</DialogHeader>
-						</div>
-					) : null}
-
 					{error ? <p className="mt-3 text-destructive text-xs">{error}</p> : null}
 				</div>
 
 				<DialogFooter className="mx-0 mb-0 shrink-0 border-t bg-muted/30 px-5 py-4">
-					{step === "welcome" ? (
-						<Button className="w-full sm:ml-auto sm:w-auto" onClick={() => setStep("model")}>
-							Get started
-						</Button>
-					) : null}
-
 					{step === "model" ? (
 						<div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-							<Button
-								onClick={() => setStep("welcome")}
-								type="button"
-								variant="ghost"
-							>
-								Back
-							</Button>
+							<span />
 							<Button
 								disabled={saving}
 								onClick={() => void handleSaveModelStep()}
 								type="button"
 							>
-								{saving ? "Saving…" : modelKeyReady ? "Continue" : "Save & continue"}
+								{saving
+									? "Saving…"
+									: serverHasDrishtiKey
+										? "Start chatting"
+										: "Next"}
 							</Button>
 						</div>
 					) : null}
@@ -427,20 +375,11 @@ export function OnboardingDialog({ open }: OnboardingDialogProps) {
 								onClick={() => void handleSaveDrishtiStep()}
 								type="button"
 							>
-								{saving
-									? "Saving…"
-									: drishtiKeyReady && !drishtiApiKey.trim()
-										? "Continue"
-										: "Save & finish"}
+								{saving ? "Saving…" : "Start chatting"}
 							</Button>
 						</div>
 					) : null}
 
-					{step === "done" ? (
-						<Button className="w-full sm:ml-auto sm:w-auto" onClick={handleFinish} type="button">
-							Start chatting
-						</Button>
-					) : null}
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
