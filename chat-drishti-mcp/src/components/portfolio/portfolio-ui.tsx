@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Trash } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -177,9 +177,7 @@ export function PortfolioCard({
 
 	return (
 		<div
-			className={cn(
-				"overflow-hidden rounded-lg border border-border bg-card",
-			)}
+			className={cn("overflow-hidden rounded-lg border border-border bg-card")}
 		>
 			<div className="flex items-start justify-between gap-2 border-border border-b bg-muted/30 px-3 py-2.5">
 				<div className="min-w-0">
@@ -240,7 +238,7 @@ export function PortfolioCard({
 						Add holding
 					</Button>
 					{autoSave ? (
-						<span className="text-muted-foreground text-[10px]">
+						<span className="text-[10px] text-muted-foreground">
 							Saved automatically for the assistant
 						</span>
 					) : onSave ? (
@@ -265,40 +263,27 @@ export function PortfolioCreateForm({
 	onSubmit: () => void;
 	variant?: "compact" | "table";
 }) {
+	const compact = variant === "compact";
 	return (
-		<div
-			className={cn(
-				"flex gap-2",
-				variant === "compact" ? "flex-col sm:flex-row" : "",
-			)}
-		>
-			<div className="min-w-0 flex-1 space-y-1">
-				{variant === "compact" ? (
-					<Label className="text-[10px] text-muted-foreground uppercase tracking-wide">
-						New portfolio
-					</Label>
-				) : null}
-				<Input
-					className={variant === "compact" ? "h-8 text-xs" : undefined}
-					onChange={(e) => onNameChange(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") onSubmit();
-					}}
-					placeholder="Portfolio name"
-					value={name}
-				/>
-			</div>
+		<div className="flex gap-2">
+			<Input
+				aria-label="New portfolio name"
+				className={cn("min-w-0 flex-1", compact && "h-8 text-xs")}
+				onChange={(e) => onNameChange(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") onSubmit();
+				}}
+				placeholder="New portfolio, e.g. Long term"
+				value={name}
+			/>
 			<Button
-				className={cn(
-					"shrink-0",
-					variant === "compact" ? "h-8 text-xs sm:self-end" : "",
-				)}
+				className={cn("shrink-0", compact && "h-8 px-3 text-xs")}
 				disabled={!name.trim()}
 				onClick={onSubmit}
 				size="sm"
 			>
 				<Plus className="mr-1 size-3.5" />
-				Add portfolio
+				Add
 			</Button>
 		</div>
 	);
@@ -390,11 +375,7 @@ export function WatchlistList({
 	onRemove: (id: string) => void;
 }) {
 	if (watchlists.length === 0) {
-		return (
-			<p className="rounded-md border border-border border-dashed px-3 py-4 text-center text-muted-foreground text-xs">
-				No watchlists yet.
-			</p>
-		);
+		return <p className="text-muted-foreground text-xs">No watchlists yet.</p>;
 	}
 
 	return (
@@ -470,38 +451,67 @@ export function WatchlistSection({
 	showCreateForm?: boolean;
 	showList?: boolean;
 }) {
+	const [formOpen, setFormOpen] = useState(false);
+
 	return (
-		<div className="space-y-3">
-			<div className="space-y-1">
-				<p className="font-medium text-foreground text-xs">Watchlists</p>
-				<p className="text-muted-foreground text-xs">
-					Symbols the assistant can reference quickly.
+		<div className="space-y-2">
+			<div className="flex items-center justify-between gap-2">
+				<p className="font-medium text-foreground text-xs">
+					Watchlists
+					{watchlists.length > 0 ? (
+						<span className="ml-1 text-muted-foreground">
+							({watchlists.length})
+						</span>
+					) : null}
 				</p>
+				{showCreateForm && !formOpen ? (
+					<Button
+						className="h-7 px-2 text-xs"
+						onClick={() => setFormOpen(true)}
+						size="sm"
+						variant="ghost"
+					>
+						<Plus className="mr-1 size-3.5" />
+						New watchlist
+					</Button>
+				) : null}
 			</div>
 
-			{showCreateForm ? (
-				<WatchlistCreateForm
-					newName={newName}
-					newSymbols={newSymbols}
-					onAdd={onAdd}
-					onNameChange={onNameChange}
-					onSymbolsChange={onSymbolsChange}
-					variant={variant}
-				/>
+			{showList ? (
+				<WatchlistList onRemove={onRemove} watchlists={watchlists} />
 			) : null}
 
-			{showList ? <WatchlistList onRemove={onRemove} watchlists={watchlists} /> : null}
+			{showCreateForm && formOpen ? (
+				<div className="an-step-in space-y-2">
+					<WatchlistCreateForm
+						newName={newName}
+						newSymbols={newSymbols}
+						onAdd={() => {
+							onAdd();
+							if (newName.trim()) setFormOpen(false);
+						}}
+						onNameChange={onNameChange}
+						onSymbolsChange={onSymbolsChange}
+						variant={variant}
+					/>
+					<button
+						className="text-[11px] text-muted-foreground hover:text-foreground"
+						onClick={() => setFormOpen(false)}
+						type="button"
+					>
+						Cancel
+					</button>
+				</div>
+			) : null}
 		</div>
 	);
 }
 
 export function PortfolioEmptyState({ children }: { children?: ReactNode }) {
 	return (
-		<div className="rounded-lg border border-border border-dashed bg-muted/15 px-3 py-5 text-center">
-			<p className="text-muted-foreground text-xs">
-				{children ?? "No portfolios yet. Create one to share holdings with the assistant."}
-			</p>
-		</div>
+		<p className="text-muted-foreground text-xs">
+			{children ?? "No portfolios yet. Add one above, then add its stocks."}
+		</p>
 	);
 }
 

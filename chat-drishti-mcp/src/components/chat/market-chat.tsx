@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
 import {
 	ChatConfigPanel,
@@ -23,6 +23,7 @@ import {
 	getLastQueryUsageFromMessages,
 	sumQueryUsageFromMessages,
 } from "~/lib/query-usage-message";
+import { playCue } from "~/lib/sound";
 import {
 	portfolioToContext,
 	useChatStore,
@@ -233,10 +234,23 @@ export function MarketChat({
 				openSettings();
 				return;
 			}
+			playCue("tap");
 			void sendMessage({ text: prompt });
 		},
 		[canChat, openSettings, sendMessage],
 	);
+
+	// Sound cue when an answer finishes or fails, so a long run is never silent.
+	const prevStatusRef = useRef(status);
+	useEffect(() => {
+		const wasBusy =
+			prevStatusRef.current === "streaming" ||
+			prevStatusRef.current === "submitted";
+		prevStatusRef.current = status;
+		if (!wasBusy) return;
+		if (status === "ready") playCue("ready");
+		if (status === "error") playCue("error");
+	}, [status]);
 
 	const modelBadgeLabel = useMemo(
 		() => getModelDisplayName(catalogModels, activeProvider, activeModel),

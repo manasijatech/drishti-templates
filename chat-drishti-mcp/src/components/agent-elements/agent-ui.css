@@ -303,3 +303,62 @@
   font-size: 12px;
   background: transparent;
 }
+
+/* Research progress: steps slide in, the done check pops, the live dot breathes. */
+@keyframes an-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes an-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes an-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.an-step-in {
+  animation: an-step-in 220ms ease-out both;
+}
+
+.an-pop {
+  animation: an-pop 280ms ease-out both;
+}
+
+.an-pulse-dot {
+  animation: an-pulse-dot 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .an-step-in,
+  .an-pop,
+  .an-pulse-dot,
+  .an-text-shimmer--active {
+    animation: none;
+  }
+}
