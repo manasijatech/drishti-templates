@@ -120,6 +120,13 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
+	/* Tailwind v4 resets buttons to the arrow cursor; clickable things get a hand. */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]),
+	summary,
+	label[for] {
+		cursor: pointer;
+	}
 	html,
 	body {
 		@apply font-sans;

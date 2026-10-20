@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageList } from "./message-list";
 import { InputBar } from "./input-bar";
 import { Suggestions, type SuggestionItem } from "./input/suggestions";
@@ -30,11 +30,27 @@ export function AgentChat({
   emptySuggestionsPlacement = "input",
   emptySuggestionsPosition = "top",
   questionTool,
+  prefill,
   className,
   style,
 }: AgentChatProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState("");
+
+  const fillInput = useCallback((text: string) => {
+    setDraft(text);
+    requestAnimationFrame(() => {
+      const textarea = rootRef.current?.querySelector("textarea");
+      if (!textarea) return;
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (prefill && prefill.signal > 0) fillInput(prefill.text);
+  }, [prefill, fillInput]);
 
   const ResolvedInputBar = slots?.InputBar ?? InputBar;
   const isEmpty = !error && messages.length === 0;
@@ -61,14 +77,7 @@ export function AgentChat({
     ) {
       return;
     }
-    setDraft(text);
-    requestAnimationFrame(() => {
-      const textarea = rootRef.current?.querySelector("textarea");
-      if (!textarea) return;
-      textarea.focus();
-      const end = textarea.value.length;
-      textarea.setSelectionRange(end, end);
-    });
+    fillInput(text);
   };
 
   const emptySuggestionsNode = showEmptySuggestions ? (

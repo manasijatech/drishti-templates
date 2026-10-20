@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import { List, NotePencil } from "@phosphor-icons/react";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
@@ -95,6 +96,8 @@ export function MarketChat({
 		target: ConfigFocusTarget;
 	}>({ signal: 0, target: "model" });
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [mobileNavOpen, setMobileNavOpen] = useState(false);
+	const [prefill, setPrefill] = useState({ text: "", signal: 0 });
 
 	const hasModelKey =
 		activeProvider === "ollama" ||
@@ -240,6 +243,11 @@ export function MarketChat({
 		[canChat, openSettings, sendMessage],
 	);
 
+	// Sidebar prompts go into the message box so the user can edit, then send.
+	const pickPrompt = useCallback((prompt: string) => {
+		setPrefill((current) => ({ text: prompt, signal: current.signal + 1 }));
+	}, []);
+
 	// Sound cue when an answer finishes or fails, so a long run is never silent.
 	const prevStatusRef = useRef(status);
 	useEffect(() => {
@@ -253,7 +261,12 @@ export function MarketChat({
 	}, [status]);
 
 	const modelBadgeLabel = useMemo(
-		() => getModelDisplayName(catalogModels, activeProvider, activeModel),
+		() =>
+			// "DeepSeek: DeepSeek V4 Flash" -> "DeepSeek V4 Flash" so it fits the badge.
+			getModelDisplayName(catalogModels, activeProvider, activeModel).replace(
+				/^[^:]+:\s*/,
+				"",
+			),
 		[activeProvider, activeModel, catalogModels],
 	);
 
@@ -293,7 +306,7 @@ export function MarketChat({
 	}
 
 	return (
-		<div className="flex h-screen flex-col">
+		<div className="flex h-dvh flex-col">
 			<OnboardingDialog
 				open={onboardingStatus === "pending"}
 				serverHasDrishtiKey={serverHasDrishtiKey}
@@ -302,28 +315,41 @@ export function MarketChat({
 				<ChatSidebar
 					activeSessionId={activeSessionId}
 					collapsed={sidebarCollapsed}
+					mobileOpen={mobileNavOpen}
 					onCollapsedChange={handleSidebarCollapsedChange}
+					onMobileOpenChange={setMobileNavOpen}
 					onNewChat={() => createSession()}
+					onPickPrompt={pickPrompt}
 					onSelectSession={setActiveSession}
-					onSendPrompt={sendPrompt}
 					onTogglePin={togglePinSession}
 					portfolios={portfolios}
 					sessions={sessions}
 					watchlists={watchlists}
 				/>
-				<div className="flex min-h-0 flex-1 flex-col bg-background">
-					<div className="flex items-center gap-2 border-border border-b px-3 py-2">
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+					<div className="flex items-center gap-1 border-border border-b px-2 py-2 sm:gap-2 sm:px-3">
 						<Button
-							className="lg:hidden"
-							onClick={() => createSession()}
-							size="sm"
-							variant="outline"
+							aria-label="Open menu"
+							className="size-9 lg:hidden"
+							onClick={() => setMobileNavOpen(true)}
+							size="icon"
+							variant="ghost"
 						>
-							New chat
+							<List className="size-5" />
 						</Button>
-						<p className="min-w-0 flex-1 truncate font-medium text-sm">
+						<p className="min-w-0 flex-1 truncate px-1 font-medium text-sm">
 							{activeChatTitle}
 						</p>
+						<Button
+							aria-label="New chat"
+							className="size-9 lg:hidden"
+							onClick={() => createSession()}
+							size="icon"
+							title="New chat"
+							variant="ghost"
+						>
+							<NotePencil className="size-5" />
+						</Button>
 						<ChatExportButton
 							disabled={messages.length === 0 || isBusy}
 							messages={messages}
@@ -363,6 +389,7 @@ export function MarketChat({
 						onSend={({ content }) => sendPrompt(content)}
 						onStop={stop}
 						placeholder="Ask about stocks, results or F&O event risk, in English, Hindi or Gujarati..."
+						prefill={prefill}
 						status={status}
 						suggestions={{
 							items: SUGGESTIONS,
@@ -371,7 +398,7 @@ export function MarketChat({
 						}}
 						toolRenderers={CHAT_TOOL_RENDERERS}
 					/>
-					<p className="px-4 pb-3 text-center text-[11px] text-muted-foreground">
+					<p className="px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-[10px] text-muted-foreground sm:text-[11px]">
 						Response speed and answer quality depend on the AI model you choose.
 						Drishti only supplies the market data.
 					</p>

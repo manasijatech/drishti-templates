@@ -527,8 +527,10 @@ export function ChatConfigPanelContent({
 						</span>
 					) : isDirty ? (
 						"Save changes"
-					) : (
+					) : hasModelKey ? (
 						"All changes saved"
+					) : (
+						"Save"
 					)}
 				</Button>
 			</ConfigDropdown>
