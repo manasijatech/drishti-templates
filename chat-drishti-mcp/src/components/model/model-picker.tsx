@@ -26,10 +26,7 @@ import {
 } from "~/components/ui/tooltip";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import { MODEL_PRESETS } from "~/lib/model-presets";
-import {
-	DEFAULT_OPENROUTER_MODEL,
-	isCustomModelSelection,
-} from "~/lib/models";
+import { DEFAULT_OPENROUTER_MODEL, isCustomModelSelection } from "~/lib/models";
 import {
 	applyModelFilters,
 	type CatalogModel,
@@ -283,7 +280,8 @@ export function ModelPicker({
 						className={cn(
 							"h-auto min-h-8 w-full justify-between gap-2 px-2.5 py-1.5 text-left font-normal",
 							compact && "py-1.5",
-							open && "rounded-b-none border-0 bg-transparent shadow-none hover:bg-transparent",
+							open &&
+								"rounded-b-none border-0 bg-transparent shadow-none hover:bg-transparent",
 						)}
 						onClick={() => setOpen((value) => !value)}
 						type="button"
@@ -611,6 +609,7 @@ export function ProviderSelect({
 					return (
 						<Button
 							className={cn("h-8 justify-start text-xs", compact && "h-7")}
+							data-cuelume-select=""
 							key={id}
 							onClick={() => onProviderChange(id as ModelProviderId)}
 							type="button"

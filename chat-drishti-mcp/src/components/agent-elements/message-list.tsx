@@ -15,6 +15,7 @@ import { Markdown } from "./markdown";
 import { ErrorMessage } from "./error-message";
 import type { CustomToolRendererProps } from "./types";
 import { IconCopy, IconCheck } from "@tabler/icons-react";
+import { play } from "cuelume";
 import { ToolRenderer as DefaultToolRenderer } from "./tools/tool-renderer";
 import { ResearchSteps } from "./tools/research-steps";
 import { normalizeAssistantToolParts } from "./utils/tool-part-normalizer";
@@ -210,7 +211,10 @@ function CopyButton({
   const copiedTimerRef = useRef<number | null>(null);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => play("success", { emphasis: "subtle" }))
+      .catch(() => play("error", { emphasis: "subtle" }));
     setCopied(true);
     if (copiedTimerRef.current) {
       window.clearTimeout(copiedTimerRef.current);
@@ -225,6 +229,7 @@ function CopyButton({
     <button
       type="button"
       tabIndex={-1}
+      data-sfx="off"
       onClick={handleCopy}
       onPointerDown={(event) => {
         event.stopPropagation();
