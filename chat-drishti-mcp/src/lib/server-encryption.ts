@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import {
+	createCipheriv,
+	createDecipheriv,
+	randomBytes,
+	scryptSync,
+} from "node:crypto";
 import { env } from "~/env";
 
 const ALGORITHM = "aes-256-gcm";
@@ -6,10 +11,13 @@ const AUTH_TAG_BYTES = 16;
 const KEY_SALT = "drishti-api-key-v1";
 
 function getEncryptionKey(): Buffer {
-	const secret = env.API_KEY_ENCRYPTION_SECRET ?? env.BETTER_AUTH_SECRET;
+	const secret =
+		env.API_KEY_ENCRYPTION_SECRET ??
+		// Local dev works out of the box; production must set a real secret.
+		(env.NODE_ENV === "production" ? undefined : "drishti-local-dev-secret");
 	if (!secret) {
 		throw new Error(
-			"API_KEY_ENCRYPTION_SECRET (or BETTER_AUTH_SECRET) is required to encrypt API keys.",
+			"Set API_KEY_ENCRYPTION_SECRET in your .env file to save API keys.",
 		);
 	}
 	return scryptSync(secret, KEY_SALT, 32);
@@ -34,7 +42,10 @@ export function encryptApiKeyServer(plaintext: string): {
 	};
 }
 
-export function decryptApiKeyServer(encryptedApiKey: string, iv: string): string {
+export function decryptApiKeyServer(
+	encryptedApiKey: string,
+	iv: string,
+): string {
 	const ivBytes = Buffer.from(iv, "base64");
 	const combined = Buffer.from(encryptedApiKey, "base64");
 	if (combined.length <= AUTH_TAG_BYTES) {
@@ -46,7 +57,8 @@ export function decryptApiKeyServer(encryptedApiKey: string, iv: string): string
 	const decipher = createDecipheriv(ALGORITHM, getEncryptionKey(), ivBytes);
 	decipher.setAuthTag(authTag);
 
-	return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString(
-		"utf8",
-	);
+	return Buffer.concat([
+		decipher.update(ciphertext),
+		decipher.final(),
+	]).toString("utf8");
 }

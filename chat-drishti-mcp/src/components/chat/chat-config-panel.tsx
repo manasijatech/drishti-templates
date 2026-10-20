@@ -6,12 +6,10 @@ import {
 	Cpu,
 	Eye,
 	EyeSlash,
-	SlidersHorizontal,
 	Trash,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
-import { ModelComparePicker } from "~/components/chat/model-compare-picker";
 import {
 	PortfolioCard,
 	PortfolioCreateForm,
@@ -23,13 +21,8 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import { Switch } from "~/components/ui/switch";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import { isValidModelForProvider } from "~/lib/models";
-import {
-	normalizeSubAgentPreferences,
-	SUB_AGENT_OPTIONS,
-} from "~/lib/sub-agents";
 import { cn } from "~/lib/utils";
 import { useMemoryStore, useModelStore } from "~/stores";
 import type { PortfolioHolding } from "~/types";
@@ -74,7 +67,7 @@ function ConfigDropdown({
 	);
 }
 
-type ConfigSectionId = "model" | "preferences" | "portfolio";
+type ConfigSectionId = "model" | "portfolio";
 
 export type ConfigFocusTarget = "model" | "drishti";
 
@@ -83,11 +76,13 @@ export function ChatConfigPanelContent({
 	focusTarget = "model",
 	apiKeyInputId = "chat-llm-provider-token",
 	drishtiApiKeyInputId = "chat-drishti-mcp-token",
+	serverHasDrishtiKey = false,
 }: {
 	focusSignal?: number;
 	focusTarget?: ConfigFocusTarget;
 	apiKeyInputId?: string;
 	drishtiApiKeyInputId?: string;
+	serverHasDrishtiKey?: boolean;
 }) {
 	const {
 		activeProvider,
@@ -102,8 +97,6 @@ export function ChatConfigPanelContent({
 		configs,
 	} = useModelStore();
 	const {
-		preferences,
-		updatePreferences,
 		portfolios,
 		watchlists,
 		addPortfolio,
@@ -152,7 +145,6 @@ export function ChatConfigPanelContent({
 	}, [focusSignal, focusTarget, apiKeyInputId, drishtiApiKeyInputId]);
 
 	const existingConfig = configs.find((c) => c.provider === activeProvider);
-	const subAgentPrefs = normalizeSubAgentPreferences(preferences.subAgents);
 	const { models: catalogModels } = useModelsCatalog({
 		provider: activeProvider,
 		ollamaBaseUrl: baseUrl || existingConfig?.baseUrl,
@@ -161,7 +153,7 @@ export function ChatConfigPanelContent({
 	const handleSave = async () => {
 		setError(null);
 		if (!isValidModelForProvider(activeProvider, activeModel, catalogModels)) {
-			setError("Select or enter a valid model ID before saving.");
+			setError("Pick a model from the list first.");
 			return;
 		}
 		try {
@@ -171,7 +163,7 @@ export function ChatConfigPanelContent({
 					.getState()
 					.configs.find((c) => c.provider === activeProvider);
 				if (!existing?.encryptedApiKey) {
-					setError("Enter an API key before saving.");
+					setError("Enter your API key first.");
 					return;
 				}
 			}
@@ -194,7 +186,7 @@ export function ChatConfigPanelContent({
 			setApiKey("");
 			setTimeout(() => setSaved(false), 2000);
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to save");
+			setError(e instanceof Error ? e.message : "Could not save. Please try again.");
 		}
 	};
 
@@ -220,11 +212,11 @@ export function ChatConfigPanelContent({
 				icon={Cpu}
 				onToggle={() => toggleSection("model")}
 				open={openSection === "model"}
-				title="Model"
+				title="AI model & keys"
 			>
 				<p className="type-body-prose text-xs">
-					Provider, model, and API keys. Keys are encrypted server-side and
-					stored locally as ciphertext.
+					Pick an AI model and add your keys. Keys are encrypted before they
+					are saved in this browser.
 				</p>
 				<div className="space-y-3">
 					<ProviderSelect
@@ -245,8 +237,6 @@ export function ChatConfigPanelContent({
 							provider={activeProvider}
 						/>
 					</div>
-
-					<ModelComparePicker compact provider={activeProvider} />
 
 					<div className="space-y-1.5">
 						<Label className="text-xs" htmlFor={apiKeyInputId}>
@@ -327,14 +317,15 @@ export function ChatConfigPanelContent({
 					<div className="space-y-1.5 border-border border-t pt-3">
 						<div className="space-y-1">
 							<Label className="text-xs" htmlFor={drishtiApiKeyInputId}>
-								Drishti MCP API Key
+								Drishti API key
 								{storedDrishtiApiKey?.encryptedApiKey ? (
 									<span className="ml-1.5 text-emerald-600 text-xs">(saved)</span>
 								) : null}
 							</Label>
 							<p className="type-body-prose text-[11px] text-muted-foreground">
-								Required for market data tools (news, movers, portfolio,
-								filings).
+								{serverHasDrishtiKey
+									? "Already set on the server. Add one here only to use a different key."
+									: "Needed for live market data: prices, news, filings, and results."}
 							</p>
 						</div>
 						<div className="relative">
@@ -347,7 +338,7 @@ export function ChatConfigPanelContent({
 								placeholder={
 									storedDrishtiApiKey?.encryptedApiKey
 										? "••••••••  (saved)"
-										: "Enter Drishti MCP API key"
+										: "Enter Drishti API key"
 								}
 								type={showDrishtiApiKey ? "text" : "password"}
 								value={drishtiApiKey}
@@ -393,77 +384,8 @@ export function ChatConfigPanelContent({
 					{error ? <p className="text-destructive text-xs">{error}</p> : null}
 
 					<Button className="h-8 w-full text-xs" onClick={handleSave}>
-						{saved ? "Saved!" : "Save configuration"}
+						{saved ? "Saved!" : "Save"}
 					</Button>
-				</div>
-			</ConfigDropdown>
-
-			<ConfigDropdown
-				icon={SlidersHorizontal}
-				onToggle={() => toggleSection("preferences")}
-				open={openSection === "preferences"}
-				title="Preferences"
-			>
-				<p className="type-body-prose text-xs">
-					Included in agent context automatically.
-				</p>
-				<div className="space-y-3">
-					<div className="space-y-1.5">
-						<Label className="text-xs" htmlFor="chat-sectors">
-							Favorite sectors
-						</Label>
-						<Input
-							className="h-8 text-xs"
-							id="chat-sectors"
-							onChange={(e) =>
-								updatePreferences({
-									favoriteSectors: e.target.value
-										.split(",")
-										.map((s) => s.trim())
-										.filter(Boolean),
-								})
-							}
-							placeholder="IT, Banking, Pharma"
-							value={preferences.favoriteSectors.join(", ")}
-						/>
-					</div>
-
-					<div className="space-y-2">
-						<div>
-							<Label className="text-xs">Sub-agents</Label>
-							<p className="type-body-prose mt-1 text-xs">
-								Toggle specialist delegation. Drishti MCP tools always stay
-								available on the supervisor.
-							</p>
-						</div>
-						{SUB_AGENT_OPTIONS.map((agent) => (
-							<div
-								className="flex items-start justify-between gap-3 rounded-lg bg-muted/40 px-2.5 py-2"
-								key={agent.id}
-							>
-								<div className="min-w-0">
-									<p className="font-medium text-foreground text-xs">
-										{agent.label}
-									</p>
-									<p className="type-body-prose text-muted-foreground text-xs">
-										{agent.description}
-									</p>
-								</div>
-								<Switch
-									checked={subAgentPrefs[agent.id]}
-									onCheckedChange={(checked) =>
-										updatePreferences({
-											subAgents: {
-												...subAgentPrefs,
-												[agent.id]: checked,
-											},
-										})
-									}
-									size="sm"
-								/>
-							</div>
-						))}
-					</div>
 				</div>
 			</ConfigDropdown>
 
@@ -474,8 +396,8 @@ export function ChatConfigPanelContent({
 				title="Portfolio"
 			>
 				<p className="type-body-prose text-xs">
-					Holdings and watchlists shared with the assistant. Name a portfolio
-					(e.g. Deion) and add symbols — the agent uses it when you ask by name.
+					Add holdings and watchlists. Then ask "How is my portfolio doing?"
+					and the assistant uses them.
 				</p>
 				<div className="space-y-4">
 					<PortfolioCreateForm
@@ -562,14 +484,16 @@ export function ChatConfigPanelContent({
 export function ChatConfigPanel({
 	focusSignal = 0,
 	focusTarget = "model",
+	serverHasDrishtiKey = false,
 }: {
 	focusSignal?: number;
 	focusTarget?: ConfigFocusTarget;
+	serverHasDrishtiKey?: boolean;
 }) {
 	return (
 		<aside className="hidden h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-border border-l bg-card xl:flex">
 			<div className="shrink-0 border-border border-b px-4 py-3">
-				<p className="type-eyebrow">Configuration</p>
+				<p className="type-eyebrow">Settings</p>
 			</div>
 			<ScrollArea className="min-h-0 flex-1">
 				<ChatConfigPanelContent
@@ -577,6 +501,7 @@ export function ChatConfigPanel({
 					drishtiApiKeyInputId="chat-drishti-mcp-token-panel"
 					focusSignal={focusSignal}
 					focusTarget={focusTarget}
+					serverHasDrishtiKey={serverHasDrishtiKey}
 				/>
 			</ScrollArea>
 		</aside>

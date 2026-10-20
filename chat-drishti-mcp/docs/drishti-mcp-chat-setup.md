@@ -13,7 +13,7 @@ Chat API route
     ↓
 Orchestrator (run agent)
     ↓
-Agent (LLM)  ──calls──►  Drishti MCP  (search_tools → describe_tools → execute_tool)
+Agent (LLM)  ──calls──►  Drishti MCP  (read_me → describe_tools → execute_tool)
     ↓
 Streamed response  ──►  AI SDK UI message stream
 ```
@@ -47,7 +47,7 @@ npm install @openai/agents @openai/agents-extensions ai @ai-sdk/openai
 ## 2. Environment variables
 
 ```env
-# Required for authenticated Drishti tier (optional for public tier)
+# Required: Drishti MCP returns 401 without a valid key
 DRISHTI_API_KEY=your_key_here
 
 # Defaults to https://mcp.drishti.manasija.in
@@ -121,7 +121,18 @@ export async function connectMarketDataServers(options: { drishtiApiKey?: string
 `connectMcpServers` returns a handle with:
 
 - `active` — connected servers to pass into `Agent({ mcpServers })`
+- `failed` / `errors` — servers that could not connect
 - `close()` — **must** be called when the request finishes (releases MCP session)
+
+> **Check `active` before running the agent.** A bad API key does not throw: the
+> server just lands in `failed`. If you run the agent anyway it has no tools and
+> will answer without live data. Stop and show an error instead:
+>
+> ```typescript
+> if (mcpServers.active.length === 0) {
+>   throw new Error("Could not connect to Drishti. Check your API key.");
+> }
+> ```
 
 ---
 
@@ -183,28 +194,7 @@ You do **not** define JSON schemas manually — MCP provides them. Allow at leas
 
 Because every operation runs through `execute_tool`, `toolFilter` cannot block one. To keep the chat on market data, `src/mcp/drishti.ts` overrides `callToolResult` and returns an error result when `execute_tool` targets a name in `DRISHTI_DISABLED_OPERATIONS` (by default `search_docs` and `get_doc`). Returning an error, instead of throwing, lets the model pick another operation.
 
-### Optional: supervisor + specialist agents
-
-You can attach the **same** `mcpServers` array to multiple agents, or expose specialists via `agent.asTool()`:
-
-```typescript
-const researchAgent = createMarketAgent(model, mcpServers.active);
-
-const supervisor = new Agent({
-  name: "Supervisor",
-  instructions: "Orchestrate Indian market research. Prefer Drishti MCP for live data.",
-  model: model as never,
-  mcpServers: mcpServers.active as never[],
-  tools: [
-    researchAgent.asTool({
-      toolName: "research_agent",
-      toolDescription: "Deep research via Drishti MCP tools.",
-    }),
-  ],
-});
-```
-
-Drishti MCP tools remain on whichever agents have `mcpServers` set.
+Tell the model about this flow in its instructions (see `src/agents/drishti-agent.ts`).
 
 ---
 
@@ -330,6 +320,9 @@ async function main() {
 
   // 2. Connect
   const mcp = await connectMcpServers([drishti]);
+  if (mcp.active.length === 0) {
+    throw new Error("Could not connect to Drishti. Check your API key.");
+  }
 
   // 3. Model
   const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY! });

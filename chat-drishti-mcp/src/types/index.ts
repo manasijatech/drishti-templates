@@ -49,18 +49,9 @@ export interface Watchlist {
 	createdAt: string;
 }
 
-export type SubAgentId =
-	| "research_agent"
-	| "news_analyst"
-	| "market_analyst"
-	| "portfolio_agent";
-
-export type SubAgentPreferences = Record<SubAgentId, boolean>;
-
 export interface UserPreferences {
 	favoriteSectors: string[];
 	defaultModelProvider?: ModelProviderId;
-	subAgents: SubAgentPreferences;
 }
 
 export interface LongTermMemory {
@@ -119,31 +110,5 @@ export interface ChatRequestBody {
 	sessionId?: string;
 	memoryContext?: string;
 	portfolioContext?: string;
-	enabledSubAgents?: SubAgentId[];
 	drishtiApiKey: string;
 }
-
-export interface ModelCompareTarget {
-	provider: ModelProviderId;
-	model: string;
-}
-
-export interface ModelCompareResult {
-	provider: ModelProviderId;
-	model: string;
-	text: string;
-	usage: QueryUsageMetadata | null;
-	durationMs: number;
-	error?: string;
-}
-
-export interface CompareChatRequestBody {
-	messages: UIMessage[];
-	modelConfigs: EncryptedModelConfig[];
-	drishtiApiKey: EncryptedApiKeyCredential;
-	sessionId?: string;
-	memoryContext?: string;
-	portfolioContext?: string;
-	enabledSubAgents?: SubAgentId[];
-}
-
