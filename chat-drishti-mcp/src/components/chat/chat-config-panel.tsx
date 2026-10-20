@@ -10,6 +10,7 @@ import {
 	SpeakerHigh,
 	Trash,
 } from "@phosphor-icons/react";
+import { play } from "cuelume";
 import { type ReactNode, useEffect, useState } from "react";
 import { ModelPicker, ProviderSelect } from "~/components/model/model-picker";
 import {
@@ -26,7 +27,7 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import { isValidModelForProvider } from "~/lib/models";
-import { useSoundEnabled } from "~/lib/sound";
+import { playCue, SOUND_THEMES, useSoundPrefs } from "~/lib/sound";
 import { cn } from "~/lib/utils";
 import { useMemoryStore, useModelStore } from "~/stores";
 import type { PortfolioHolding } from "~/types";
@@ -274,7 +275,7 @@ export function ChatConfigPanelContent({
 		addWatchlist,
 		removeWatchlist,
 	} = useMemoryStore();
-	const [soundEnabled, setSoundEnabled] = useSoundEnabled();
+	const [soundPrefs, setSoundPrefs] = useSoundPrefs();
 
 	const [apiKey, setApiKey] = useState("");
 	const [drishtiApiKey, setDrishtiApiKey] = useState("");
@@ -374,8 +375,10 @@ export function ChatConfigPanelContent({
 			setBaseUrl("");
 			setSavedSignal((n) => n + 1);
 			setJustSaved(true);
+			playCue("success");
 			window.setTimeout(() => setJustSaved(false), 2000);
 		} catch (e) {
+			playCue("error");
 			setError(
 				e instanceof Error ? e.message : "Could not save. Please try again.",
 			);
@@ -527,8 +530,10 @@ export function ChatConfigPanelContent({
 						</span>
 					) : isDirty ? (
 						"Save changes"
-					) : (
+					) : hasModelKey ? (
 						"All changes saved"
+					) : (
+						"Save"
 					)}
 				</Button>
 			</ConfigDropdown>
@@ -629,22 +634,70 @@ export function ChatConfigPanelContent({
 				/>
 			</ConfigDropdown>
 
-			<div className="flex items-center gap-2.5 px-3 py-3">
-				<SpeakerHigh
-					className="size-4 shrink-0 text-muted-foreground"
-					weight="light"
-				/>
-				<div className="min-w-0 flex-1">
-					<p className="font-medium text-foreground text-sm">Sound effects</p>
-					<p className="text-[11px] text-muted-foreground">
-						A soft chime when an answer is ready
-					</p>
+			<div className="space-y-3 px-3 py-3">
+				<div className="flex items-center gap-2.5">
+					<SpeakerHigh
+						className="size-4 shrink-0 text-muted-foreground"
+						weight="light"
+					/>
+					<div className="min-w-0 flex-1">
+						<p className="font-medium text-foreground text-sm">Sound effects</p>
+						<p className="text-[11px] text-muted-foreground">
+							Clicks, toggles, and a chime when an answer is ready
+						</p>
+					</div>
+					<Switch
+						aria-label="Sound effects"
+						checked={soundPrefs.enabled}
+						onCheckedChange={(checked) => setSoundPrefs({ enabled: checked })}
+					/>
 				</div>
-				<Switch
-					aria-label="Sound effects"
-					checked={soundEnabled}
-					onCheckedChange={(checked) => setSoundEnabled(checked)}
-				/>
+
+				{soundPrefs.enabled ? (
+					<div className="an-step-in space-y-3 pl-6.5">
+						<div className="flex items-center justify-between gap-2">
+							<p className="text-foreground text-xs">Typing sounds</p>
+							<Switch
+								aria-label="Typing sounds"
+								checked={soundPrefs.typing}
+								onCheckedChange={(checked) =>
+									setSoundPrefs({ typing: checked })
+								}
+								size="sm"
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<p className="text-foreground text-xs">Sound style</p>
+							<div className="grid grid-cols-4 gap-1" data-sfx="off">
+								{SOUND_THEMES.map((theme) => {
+									const active = soundPrefs.theme === theme.id;
+									return (
+										<button
+											aria-pressed={active}
+											className={cn(
+												"h-7 rounded-md border text-[11px] transition-colors",
+												active
+													? "border-primary bg-primary text-primary-foreground"
+													: "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+											)}
+											key={theme.id}
+											onClick={() => {
+												setSoundPrefs({ theme: theme.id });
+												play("success", { theme: theme.id });
+											}}
+											type="button"
+										>
+											{theme.label}
+										</button>
+									);
+								})}
+							</div>
+							<p className="text-[10px] text-muted-foreground">
+								Tap a style to hear it.
+							</p>
+						</div>
+					</div>
+				) : null}
 			</div>
 		</div>
 	);

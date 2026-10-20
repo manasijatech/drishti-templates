@@ -534,7 +534,7 @@ export const InputBar = memo(function InputBar({
                     data-form-type="other"
                     data-lpignore="true"
                     className={cn(
-                      "peer w-full resize-none bg-transparent border-0 outline-none text-[14px] leading-[1.6] text-an-foreground placeholder:text-an-input-placeholder-color",
+                      "peer w-full resize-none bg-transparent border-0 outline-none text-[16px] sm:text-[14px] leading-[1.6] text-an-foreground placeholder:text-an-input-placeholder-color",
                       "overflow-hidden",
                       disabled && "opacity-50 cursor-not-allowed",
                     )}
@@ -561,6 +561,7 @@ export const InputBar = memo(function InputBar({
                 {/* Send / Stop button */}
                 <button
                   type="button"
+                  data-sfx={isStreaming ? undefined : "off"}
                   aria-label={
                     isStreaming ? "Stop generating" : "Send message"
                   }

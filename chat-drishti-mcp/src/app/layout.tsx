@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
 	themeColor: "#01378F",
+	viewportFit: "cover",
 };
 
 const rethinkSans = Rethink_Sans({
