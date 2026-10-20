@@ -26,7 +26,10 @@ import {
 } from "~/components/ui/tooltip";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
 import { MODEL_PRESETS } from "~/lib/model-presets";
-import { isCustomModelSelection } from "~/lib/models";
+import {
+	DEFAULT_OPENROUTER_MODEL,
+	isCustomModelSelection,
+} from "~/lib/models";
 import {
 	applyModelFilters,
 	type CatalogModel,
@@ -576,7 +579,7 @@ export function ModelPicker({
 							}}
 							placeholder={
 								provider === "openrouter"
-									? "google/gemini-2.5-flash"
+									? DEFAULT_OPENROUTER_MODEL
 									: provider === "ollama"
 										? "llama3.2"
 										: "gpt-4.1"

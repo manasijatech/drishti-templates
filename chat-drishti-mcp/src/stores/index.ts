@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { resolveModelForProvider } from "~/lib/models";
+import {
+	DEFAULT_OPENROUTER_MODEL,
+	resolveModelForProvider,
+} from "~/lib/models";
 import { portfolioToContext } from "~/lib/portfolio-context";
 import type {
 	ChatSession,
@@ -71,7 +74,7 @@ export const useModelStore = create<ModelStore>()(
 	persist(
 		(set, get) => ({
 			activeProvider: "openrouter",
-			activeModel: "google/gemini-2.5-flash",
+			activeModel: DEFAULT_OPENROUTER_MODEL,
 			configs: [],
 			drishtiApiKey: null,
 			onboardingStatus: "pending",
