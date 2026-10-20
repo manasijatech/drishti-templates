@@ -13,7 +13,7 @@ Chat API route
     ↓
 Orchestrator (run agent)
     ↓
-Agent (LLM)  ──calls──►  Drishti MCP tools  (read_me, describe_tools, execute_tool)
+Agent (LLM)  ──calls──►  Drishti MCP  (read_me → describe_tools → execute_tool)
     ↓
 Streamed response  ──►  AI SDK UI message stream
 ```
@@ -78,11 +78,6 @@ export function createDrishtiMcpServer(apiKey?: string) {
     name: "Drishti",
     cacheToolsList: true, // avoid re-listing tools on every turn
 
-    // Optional: block tools you don't want the model to see
-    toolFilter: {
-      blockedToolNames: ["search_docs", "get_doc"],
-    },
-
     ...(apiKey
       ? {
           requestInit: {
@@ -101,7 +96,6 @@ export function createDrishtiMcpServer(apiKey?: string) {
 - `url` — Drishti MCP endpoint
 - `name` — label used in logs/traces
 - `cacheToolsList` — caches `listTools` result per server instance
-- `toolFilter.blockedToolNames` / `allowedToolNames` — static allow/deny lists
 - `requestInit.headers` — Bearer auth for Drishti
 
 ---
@@ -183,15 +177,24 @@ Always cite which tool/data you used.
 }
 ```
 
-Drishti MCP uses a compact protocol, so the model sees a few general tools instead of one tool per operation:
+Drishti's `listTools` returns four tools, and the model reaches every Drishti operation through them:
 
-- `read_me` — call with `{ mode: "data" }` to get routing guidance and the list of operations
-- `describe_tools` — get the input schema for one or more operations
-- `execute_tool` — run an operation: `{ name: "get_top_movers", arguments: { ... } }`
+| Tool | Purpose |
+| --- | --- |
+| `read_me` | Routing guidance. Call with `mode: "data"` for market research. |
+| `search_tools` | Find operations by intent. |
+| `describe_tools` | Load the input schema for chosen operations. |
+| `execute_tool` | Run an operation, e.g. `{ name: "get_top_movers", arguments: { top_n: 10 } }`. |
 
-Useful operations include `resolve_symbols`, `get_daily_summary`, `get_top_movers`, `get_news`, `get_announcements`, `get_upcoming_earnings`, `list_earnings`, `get_concalls`, and `get_sectoral_data`.
+Operations include `get_top_movers`, `get_news`, `get_announcements`, `list_earnings`, `search_concalls`, `get_daily_summary`, and more. See the [operation catalog](https://drishti.manasija.in/docs/guides/drishti-mcp#available-mcp-tools).
 
-Tell the model about this flow in its instructions (see `src/agents/drishti-agent.ts`). You do **not** define JSON schemas manually — MCP provides them.
+You do **not** define JSON schemas manually — MCP provides them. Allow at least 10 turns (`maxTurns`) so the model can discover, describe, and run operations before answering.
+
+### Blocking operations
+
+Because every operation runs through `execute_tool`, `toolFilter` cannot block one. To keep the chat on market data, `src/mcp/drishti.ts` overrides `callToolResult` and returns an error result when `execute_tool` targets a name in `DRISHTI_DISABLED_OPERATIONS` (by default `search_docs` and `get_doc`). Returning an error, instead of throwing, lets the model pick another operation.
+
+Tell the model about this flow in its instructions (see `src/agents/drishti-agent.ts`).
 
 ---
 
@@ -358,7 +361,7 @@ main().catch(console.error);
 |---------|----------------|
 | Model never calls tools | `mcpServers` not passed to `Agent`, or instructions don't mention using tools |
 | `401` from MCP | Missing/invalid `DRISHTI_API_KEY` |
-| Tools list empty | MCP URL wrong, server down, or all tools blocked by `toolFilter` |
+| Tools list empty | MCP URL wrong or server down. A healthy connection lists `read_me`, `search_tools`, `describe_tools`, `execute_tool` |
 | Hangs after response | `mcp.close()` not called |
 | Tool name mismatch in logs | MCP tools may be prefixed with server name depending on SDK version — normalize when logging |
 
