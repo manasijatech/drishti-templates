@@ -108,7 +108,11 @@ export function Markdown({ content, className }: MarkdownProps) {
     ),
     a: ({ href, children, ...props }) => {
       if (!href) return <span>{children}</span>;
-      const isExternal = href.startsWith("http") || href.startsWith("mailto:");
+      // Source documents (/api/citation/...) also open in a new tab.
+      const isExternal =
+        href.startsWith("http") ||
+        href.startsWith("mailto:") ||
+        href.startsWith("/api/citation/");
       return (
         <a
           {...props}

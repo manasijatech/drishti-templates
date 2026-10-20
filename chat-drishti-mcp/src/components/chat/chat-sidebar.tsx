@@ -18,6 +18,7 @@ import {
 	getSessionIconKey,
 	groupSessionsByDate,
 	SIDEBAR_ICONS,
+	DEMO_PROMPT_GROUPS,
 	DEMO_PROMPTS,
 	type SidebarIconKey,
 } from "~/lib/chat-sidebar-utils";
@@ -223,14 +224,14 @@ export function ChatSidebar({
 			items.push({
 				icon: "briefcase",
 				label: portfolio.name,
-				prompt: `Analyze my portfolio "${portfolio.name}" holdings, allocation, and risks.`,
+				prompt: `Brief me on my portfolio "${portfolio.name}": what changed in filings, news, results, block deals and prices?`,
 			});
 		}
 		for (const watchlist of watchlists.slice(0, 4 - items.length)) {
 			items.push({
 				icon: "watchlist",
 				label: watchlist.name,
-				prompt: `Analyze my watchlist "${watchlist.name}" (${watchlist.symbols.join(", ")}).`,
+				prompt: `Brief me on my watchlist "${watchlist.name}" (${watchlist.symbols.join(", ")}): what changed in filings, news, results, block deals and prices?`,
 			});
 		}
 		return items;
@@ -385,7 +386,7 @@ export function ChatSidebar({
 
 						{workspaceItems.length > 0 && !searchQuery && (
 							<div>
-								<SidebarSectionLabel collapsed={collapsed}>Watchlists</SidebarSectionLabel>
+								<SidebarSectionLabel collapsed={collapsed}>My stocks</SidebarSectionLabel>
 								{workspaceItems.map((item) => (
 									<PromptRow
 										collapsed={collapsed}
@@ -398,20 +399,23 @@ export function ChatSidebar({
 							</div>
 						)}
 
-						{!searchQuery && (
-							<div>
-								<SidebarSectionLabel collapsed={collapsed}>Try asking</SidebarSectionLabel>
-								{DEMO_PROMPTS.map((item) => (
-									<PromptRow
-										collapsed={collapsed}
-										iconKey={item.icon}
-										key={item.label}
-										label={item.label}
-										onClick={() => onSendPrompt(item.prompt)}
-									/>
-								))}
-							</div>
-						)}
+						{!searchQuery &&
+							DEMO_PROMPT_GROUPS.map((group) => (
+								<div key={group}>
+									<SidebarSectionLabel collapsed={collapsed}>{group}</SidebarSectionLabel>
+									{DEMO_PROMPTS.filter((item) => item.group === group).map(
+										(item) => (
+											<PromptRow
+												collapsed={collapsed}
+												iconKey={item.icon}
+												key={item.label}
+												label={item.label}
+												onClick={() => onSendPrompt(item.prompt)}
+											/>
+										),
+									)}
+								</div>
+							))}
 					</>
 				)}
 			</ScrollArea>

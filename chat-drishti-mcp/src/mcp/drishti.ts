@@ -1,4 +1,5 @@
 import { type CallToolResult, MCPServerStreamableHttp } from "@openai/agents";
+import { hideCitationKeys } from "~/lib/citations";
 
 export const DRISHTI_MCP_URL =
 	process.env.DRISHTI_MCP_URL ?? "https://mcp.drishti.manasija.in";
@@ -14,6 +15,9 @@ export const DRISHTI_DISABLED_OPERATIONS = ["search_docs", "get_doc"] as const;
 const disabledOperations = new Set<string>(DRISHTI_DISABLED_OPERATIONS);
 
 class DrishtiMcpServer extends MCPServerStreamableHttp {
+	/** True when using the server's shared key, which must not leak in links. */
+	hideKeyInLinks = false;
+
 	override async callToolResult(
 		toolName: string,
 		args: Record<string, unknown> | null,
@@ -32,12 +36,21 @@ class DrishtiMcpServer extends MCPServerStreamableHttp {
 				isError: true,
 			};
 		}
-		return super.callToolResult(toolName, args, meta);
+		const result = await super.callToolResult(toolName, args, meta);
+		if (!this.hideKeyInLinks) return result;
+		return {
+			...result,
+			content: result.content.map((item) =>
+				item.type === "text" && typeof item.text === "string"
+					? { ...item, text: hideCitationKeys(item.text) }
+					: item,
+			),
+		};
 	}
 }
 
 export function createDrishtiMcpServer(apiKey?: string) {
-	return new DrishtiMcpServer({
+	const server = new DrishtiMcpServer({
 		url: DRISHTI_MCP_URL,
 		name: "Drishti",
 		cacheToolsList: true,
@@ -54,4 +67,7 @@ export function createDrishtiMcpServer(apiKey?: string) {
 				}
 			: {}),
 	});
+	server.hideKeyInLinks =
+		Boolean(apiKey) && apiKey === process.env.DRISHTI_API_KEY;
+	return server;
 }

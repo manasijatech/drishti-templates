@@ -176,49 +176,105 @@ export function filterSessions(
 	return sessions.filter((s) => s.title.toLowerCase().includes(q));
 }
 
-/** Demo prompts. Each one maps to real Drishti MCP operations. */
+export const DEMO_PROMPT_GROUPS = [
+	"Market",
+	"Companies",
+	"Results & calls",
+	"Watch",
+] as const;
+
+export type DemoPromptGroup = (typeof DEMO_PROMPT_GROUPS)[number];
+
+/**
+ * Demo prompts. Each one maps to real Drishti MCP operations.
+ * The first six also show as chips on the empty chat screen.
+ */
 export const DEMO_PROMPTS: {
+	group: DemoPromptGroup;
 	icon: SidebarIconKey;
 	label: string;
 	prompt: string;
 }[] = [
 	{
+		group: "Market",
 		icon: "chart",
 		label: "Market today",
 		prompt:
 			"How did the Indian market do today? Give a short summary with the top gainers and losers.",
 	},
 	{
+		group: "Companies",
+		icon: "swing",
+		label: "Why did it move?",
+		prompt:
+			"Which large-cap stock moved the most today, and why? Check its news and exchange filings.",
+	},
+	{
+		group: "Results & calls",
+		icon: "earnings",
+		label: "Infosys earnings call",
+		prompt:
+			"What did Infosys management say in their latest earnings call? Include guidance and key numbers.",
+	},
+	{
+		group: "Results & calls",
+		icon: "sector",
+		label: "Who is expanding?",
+		prompt:
+			"Which companies talked about capacity expansion or new capex in their latest earnings calls?",
+	},
+	{
+		group: "Watch",
+		icon: "dividend",
+		label: "Dividends & buybacks",
+		prompt:
+			"List dividends, buybacks, bonus issues and stock splits announced in the last 7 days.",
+	},
+	{
+		group: "Watch",
+		icon: "risk",
+		label: "Red flags in Nifty 50",
+		prompt:
+			"Any red flags in Nifty 50 companies in the last 30 days, like penalties, litigation, credit rating changes or regulator inspections?",
+	},
+	{
+		group: "Market",
+		icon: "movers",
+		label: "Volume spikes",
+		prompt:
+			"Which stocks have unusually high trading volume today? Is there news or a filing behind it?",
+	},
+	{
+		group: "Market",
+		icon: "bank",
+		label: "Block deals",
+		prompt: "Show the biggest block deals of the last week.",
+	},
+	{
+		group: "Companies",
 		icon: "news",
 		label: "Reliance news & filings",
 		prompt:
 			"What is the latest news and exchange filings for Reliance Industries?",
 	},
 	{
+		group: "Companies",
+		icon: "compare",
+		label: "HDFC Bank vs ICICI Bank",
+		prompt:
+			"Compare the latest quarterly results of HDFC Bank and ICICI Bank in a table: revenue, profit and growth.",
+	},
+	{
+		group: "Results & calls",
 		icon: "calendar",
 		label: "Results this week",
 		prompt: "Which companies are announcing their quarterly results this week?",
 	},
 	{
-		icon: "earnings",
-		label: "Infosys earnings call",
-		prompt: "What did Infosys management say in their latest earnings call?",
-	},
-	{
-		icon: "bank",
-		label: "Banking sector",
-		prompt:
-			"How is the banking sector doing? Show the top banking stocks by market cap.",
-	},
-	{
-		icon: "movers",
-		label: "52-week highs",
-		prompt: "Which stocks are trading near their 52-week high?",
-	},
-	{
+		group: "Watch",
 		icon: "portfolio",
-		label: "My portfolio",
+		label: "My portfolio briefing",
 		prompt:
-			"Give me an update on my portfolio: prices, news, and upcoming results.",
+			"Brief me on my portfolio: what changed in filings, news, results, block deals and prices?",
 	},
 ];
