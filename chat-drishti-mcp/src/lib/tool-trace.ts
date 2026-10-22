@@ -158,6 +158,52 @@ export function toJsonRpcRequest(toolName: string, input: unknown) {
 	};
 }
 
+export type JsonTokenKind =
+	| "key"
+	| "string"
+	| "number"
+	| "literal"
+	| "punctuation"
+	| "text";
+
+export interface JsonToken {
+	kind: JsonTokenKind;
+	text: string;
+}
+
+const JSON_TOKEN =
+	/("(?:\\.|[^"\\])*")(\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}[\],]/g;
+
+/**
+ * Splits pretty-printed JSON into coloured tokens. Lenient on purpose: a
+ * truncated preview or plain text still renders, just with less colour.
+ */
+export function tokenizeJson(text: string): JsonToken[] {
+	const tokens: JsonToken[] = [];
+	let last = 0;
+	for (const match of text.matchAll(JSON_TOKEN)) {
+		const index = match.index ?? 0;
+		if (index > last)
+			tokens.push({ kind: "text", text: text.slice(last, index) });
+		const [whole, quoted, colon] = match;
+		if (quoted && colon) {
+			tokens.push({ kind: "key", text: quoted });
+			tokens.push({ kind: "punctuation", text: colon });
+		} else if (quoted) {
+			tokens.push({ kind: "string", text: quoted });
+		} else if (/^[{}[\],]$/.test(whole)) {
+			tokens.push({ kind: "punctuation", text: whole });
+		} else if (/^(?:true|false|null)$/.test(whole)) {
+			tokens.push({ kind: "literal", text: whole });
+		} else {
+			tokens.push({ kind: "number", text: whole });
+		}
+		last = index + whole.length;
+	}
+	if (last < text.length) tokens.push({ kind: "text", text: text.slice(last) });
+	return tokens;
+}
+
 export type TraceToolPart = {
 	toolCallId: string;
 	toolName: string;
