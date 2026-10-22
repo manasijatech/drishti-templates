@@ -1,7 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { List, NotePencil } from "@phosphor-icons/react";
+import { List, NotePencil, Pulse } from "@phosphor-icons/react";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentChat } from "~/components/agent-elements/agent-chat";
@@ -14,6 +14,7 @@ import { ChatExportButton } from "~/components/chat/chat-export-button";
 import { ChatSidebar } from "~/components/chat/chat-sidebar";
 import { ChatShellSkeleton } from "~/components/chat/chat-skeleton";
 import { QueryCostMenu } from "~/components/chat/query-cost-menu";
+import { TracePanel } from "~/components/chat/trace-panel";
 import { OnboardingDialog } from "~/components/onboarding/onboarding-dialog";
 import { Button } from "~/components/ui/button";
 import { useModelsCatalog } from "~/hooks/use-models-catalog";
@@ -25,6 +26,7 @@ import {
 	sumQueryUsageFromMessages,
 } from "~/lib/query-usage-message";
 import { playCue, startSoundEffects } from "~/lib/sound";
+import { cn } from "~/lib/utils";
 import {
 	portfolioToContext,
 	useChatStore,
@@ -33,6 +35,7 @@ import {
 } from "~/stores";
 
 const SIDEBAR_COLLAPSED_KEY = "drishti-sidebar-collapsed";
+const TRACE_OPEN_KEY = "drishti-trace-open";
 
 const SUGGESTIONS = DEMO_PROMPTS.slice(0, 6).map((item) => {
 	const Icon = SIDEBAR_ICONS[item.icon];
@@ -98,6 +101,7 @@ export function MarketChat({
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
 	const [prefill, setPrefill] = useState({ text: "", signal: 0 });
+	const [traceOpen, setTraceOpen] = useState(false);
 
 	const hasModelKey =
 		activeProvider === "ollama" ||
@@ -114,6 +118,30 @@ export function MarketChat({
 		try {
 			const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
 			if (stored === "true") setSidebarCollapsed(true);
+		} catch {
+			// ignore
+		}
+	}, []);
+
+	// Trace panel: open with ?trace=1 (or ?trace=0 to close); remembered after that.
+	useEffect(() => {
+		try {
+			const param = new URLSearchParams(window.location.search).get("trace");
+			if (param === "1" || param === "0") {
+				setTraceOpen(param === "1");
+				localStorage.setItem(TRACE_OPEN_KEY, String(param === "1"));
+				return;
+			}
+			if (localStorage.getItem(TRACE_OPEN_KEY) === "true") setTraceOpen(true);
+		} catch {
+			// ignore
+		}
+	}, []);
+
+	const handleTraceOpenChange = useCallback((open: boolean) => {
+		setTraceOpen(open);
+		try {
+			localStorage.setItem(TRACE_OPEN_KEY, String(open));
 		} catch {
 			// ignore
 		}
@@ -222,12 +250,14 @@ export function MarketChat({
 				}));
 				return;
 			}
+			// Settings and the trace share the right-hand column.
+			handleTraceOpenChange(false);
 			setPanelFocus((current) => ({
 				signal: current.signal + 1,
 				target: resolvedTarget,
 			}));
 		},
-		[hasModelKey, hasDrishtiKey],
+		[hasModelKey, hasDrishtiKey, handleTraceOpenChange],
 	);
 
 	const sendPrompt = useCallback(
@@ -352,6 +382,20 @@ export function MarketChat({
 						>
 							<NotePencil className="size-5" />
 						</Button>
+						<Button
+							aria-label={traceOpen ? "Hide trace" : "Show trace"}
+							aria-pressed={traceOpen}
+							className={cn(
+								"hidden h-9 gap-1.5 px-2.5 lg:inline-flex",
+								traceOpen && "bg-muted",
+							)}
+							onClick={() => handleTraceOpenChange(!traceOpen)}
+							title="Show every MCP call: request, response and timing"
+							variant="ghost"
+						>
+							<Pulse className="size-4" weight="light" />
+							<span className="text-xs">Trace</span>
+						</Button>
 						<ChatExportButton
 							disabled={messages.length === 0 || isBusy}
 							messages={messages}
@@ -405,11 +449,19 @@ export function MarketChat({
 						Drishti only supplies the market data.
 					</p>
 				</div>
-				<ChatConfigPanel
-					focusSignal={panelFocus.signal}
-					focusTarget={panelFocus.target}
-					serverHasDrishtiKey={serverHasDrishtiKey}
-				/>
+				{traceOpen ? (
+					<TracePanel
+						messages={messages}
+						onClose={() => handleTraceOpenChange(false)}
+					/>
+				) : null}
+				<div className={cn("flex min-h-0", traceOpen && "hidden")}>
+					<ChatConfigPanel
+						focusSignal={panelFocus.signal}
+						focusTarget={panelFocus.target}
+						serverHasDrishtiKey={serverHasDrishtiKey}
+					/>
+				</div>
 			</div>
 		</div>
 	);

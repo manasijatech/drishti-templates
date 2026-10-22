@@ -59,4 +59,42 @@ describe("Drishti MCP server", () => {
 		});
 		expect(JSON.stringify(result.content)).toContain("api_key=user-key");
 	});
+
+	test("reports each call's timing and response size", async () => {
+		stubUpstream("user-key");
+		const calls: unknown[][] = [];
+		const server = createDrishtiMcpServer("user-key", (...args) =>
+			calls.push(args),
+		);
+		const args = { name: "get_announcements", arguments: {} };
+		const result = await server.callToolResult("execute_tool", args);
+
+		expect(calls).toHaveLength(1);
+		const [toolName, sentArgs, timing] = calls[0] as [
+			string,
+			unknown,
+			{ durationMs: number; responseBytes: number; isError?: boolean },
+		];
+		expect(toolName).toBe("execute_tool");
+		expect(sentArgs).toEqual(args);
+		expect(timing.durationMs).toBeGreaterThanOrEqual(0);
+		expect(timing.responseBytes).toBe(
+			new TextEncoder().encode(
+				(result.content[0] as unknown as { text: string }).text,
+			).length,
+		);
+		expect(timing.isError).toBeUndefined();
+	});
+
+	test("reports blocked operations as errors", async () => {
+		const calls: unknown[][] = [];
+		const server = createDrishtiMcpServer("test-key", (...args) =>
+			calls.push(args),
+		);
+		await server.callToolResult("execute_tool", {
+			name: "search_docs",
+			arguments: {},
+		});
+		expect((calls[0]?.[2] as { isError?: boolean }).isError).toBe(true);
+	});
 });
