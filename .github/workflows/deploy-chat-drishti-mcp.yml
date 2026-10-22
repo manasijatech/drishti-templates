@@ -1,0 +1,57 @@
+name: Deploy chat-drishti-mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "chat-drishti-mcp/**"
+      - ".github/workflows/deploy-chat-drishti-mcp.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-chat-drishti-mcp
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, drishti-chat]
+    env:
+      REPO_DIR: /home/deion/prod-repos/drishti-templates
+      APP_DIR: /home/deion/prod-repos/drishti-templates/chat-drishti-mcp
+      PATH: /home/deion/.bun/bin:/home/deion/.nvm/versions/node/v24.11.1/bin:/usr/local/bin:/usr/bin:/bin
+    steps:
+      - name: Pull latest main
+        run: |
+          cd "$REPO_DIR"
+          echo "PREV_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          git fetch origin main
+          git merge --ff-only "${{ github.sha }}"
+
+      - name: Install and build
+        run: |
+          cd "$APP_DIR"
+          bun install
+          bun run build
+
+      - name: Restart app
+        run: pm2 restart drishti-chat --update-env
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 15); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:6010/chat || true)
+            [ "$code" = "200" ] && echo "Healthy" && exit 0
+            sleep 2
+          done
+          echo "Health check failed (last status: $code)"
+          exit 1
+
+      - name: Roll back on failure
+        if: failure()
+        run: |
+          cd "$REPO_DIR"
+          git reset --hard "$PREV_SHA"
+          cd "$APP_DIR"
+          bun install
+          bun run build
+          pm2 restart drishti-chat --update-env
