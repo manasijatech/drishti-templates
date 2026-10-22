@@ -292,3 +292,42 @@
 		background-image: none;
 	}
 }
+
+/* ───────────────────────── Scrollbars ─────────────────────────
+   Thin, rounded, no arrow buttons; matches the ScrollArea component.
+   Chrome 121+ ignores ::-webkit-scrollbar when scrollbar-color is set,
+   so the standard properties are for Firefox only. */
+@supports (-moz-appearance: none) {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent)
+			transparent;
+	}
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	/* The transparent border keeps a gap around the thumb so it looks slim. */
+	border: 3px solid transparent;
+	border-radius: 9999px;
+	background-color: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+	background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	border-width: 2px;
+	background-color: color-mix(in oklab, var(--muted-foreground) 55%, transparent);
+}
+
+::-webkit-scrollbar-button {
+	display: none;
+}
