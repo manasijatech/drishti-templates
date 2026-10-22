@@ -11,6 +11,7 @@ import {
 	logToolExecution,
 	recordUsage,
 } from "~/lib/observability";
+import { ToolTimingRecorder, withToolTimings } from "~/lib/tool-trace";
 import { connectMarketDataServers } from "~/mcp/registry";
 import { createAgentModel } from "~/providers";
 import type { ChatRequestBody, QueryUsageMetadata } from "~/types";
@@ -131,8 +132,10 @@ export async function runAgentChat(
 	options?: { signal?: AbortSignal },
 ) {
 	const sessionId = body.sessionId ?? crypto.randomUUID();
+	const toolTimings = new ToolTimingRecorder();
 	const mcpServers = await connectMarketDataServers({
 		drishtiApiKey: body.drishtiApiKey,
+		onToolCall: toolTimings.record,
 	});
 
 	try {
@@ -182,7 +185,10 @@ export async function runAgentChat(
 		const uiStream = createAiSdkUiMessageStream(observedStreamSource);
 
 		const response = createUIMessageStreamResponse({
-			stream: appendQueryUsageToUiStream(uiStream, runResult),
+			stream: appendQueryUsageToUiStream(
+				withToolTimings(uiStream, toolTimings),
+				runResult,
+			),
 			headers: { "X-Session-Id": sessionId },
 		});
 
