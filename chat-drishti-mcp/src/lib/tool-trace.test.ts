@@ -6,6 +6,7 @@ import {
 	redactSecrets,
 	ToolTimingRecorder,
 	toJsonRpcRequest,
+	tokenizeJson,
 	withToolTimings,
 } from "./tool-trace";
 
@@ -173,5 +174,29 @@ describe("buildTraceTurns", () => {
 		expect(turns[0]?.calls.map((c) => c.timing?.durationMs)).toEqual([100, 50]);
 		expect(turns[0]?.totalMcpMs).toBe(150);
 		expect(turns[0]?.usage?.requests).toBe(2);
+	});
+});
+
+describe("tokenizeJson", () => {
+	test("colours keys, strings, numbers and literals, and keeps every character", () => {
+		const text =
+			'{\n  "name": "get_news",\n  "days": 7,\n  "ok": true,\n  "x": null\n}';
+		const tokens = tokenizeJson(text);
+		expect(tokens.map((t) => t.text).join("")).toBe(text);
+		const kinds = (kind: string) =>
+			tokens.filter((t) => t.kind === kind).map((t) => t.text);
+		expect(kinds("key")).toEqual(['"name"', '"days"', '"ok"', '"x"']);
+		expect(kinds("string")).toEqual(['"get_news"']);
+		expect(kinds("number")).toEqual(["7"]);
+		expect(kinds("literal")).toEqual(["true", "null"]);
+	});
+
+	test("handles escaped quotes and a cut-off preview", () => {
+		const text = '{"q": "say \\"hi\\"", "cut": "unfinish';
+		const tokens = tokenizeJson(text);
+		expect(tokens.map((t) => t.text).join("")).toBe(text);
+		expect(tokens.find((t) => t.kind === "string")?.text).toBe(
+			'"say \\"hi\\""',
+		);
 	});
 });

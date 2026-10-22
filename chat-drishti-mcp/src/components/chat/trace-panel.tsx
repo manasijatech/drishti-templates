@@ -10,21 +10,46 @@ import {
 } from "~/components/agent-elements/utils/drishti-labels";
 import { normalizeToolPart } from "~/components/agent-elements/utils/tool-part-normalizer";
 import { Button } from "~/components/ui/button";
-import { ScrollArea } from "~/components/ui/scroll-area";
 import {
 	buildTraceTurns,
 	extractSourceLinks,
 	formatBytes,
 	formatDuration,
+	type JsonTokenKind,
 	redactSecrets,
 	type TraceCall,
 	type TraceTurn,
 	toJsonRpcRequest,
+	tokenizeJson,
 } from "~/lib/tool-trace";
 import { cn } from "~/lib/utils";
 
 /** Long responses are cut so the panel stays fast; the full text is one click away. */
 const RESPONSE_PREVIEW_CHARS = 4000;
+
+const TOKEN_CLASS: Record<JsonTokenKind, string> = {
+	key: "text-sky-700 dark:text-sky-300",
+	string: "text-emerald-700 dark:text-emerald-400",
+	number: "text-amber-700 dark:text-amber-400",
+	literal: "text-violet-700 dark:text-violet-400",
+	punctuation: "text-muted-foreground",
+	text: "",
+};
+
+/** Synchronous JSON colouring: instant, even for a 50 KB response. */
+function JsonHighlight({ text }: { text: string }) {
+	const tokens = useMemo(() => tokenizeJson(text), [text]);
+	return tokens.map((token, i) =>
+		token.kind === "text" ? (
+			token.text
+		) : (
+			// biome-ignore lint/suspicious/noArrayIndexKey: tokens are static for a given text
+			<span className={TOKEN_CLASS[token.kind]} key={i}>
+				{token.text}
+			</span>
+		),
+	);
+}
 
 function prettyJson(value: unknown): string {
 	if (typeof value === "string") return value;
@@ -55,9 +80,18 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
-function CodeBlock({ label, text }: { label: string; text: string }) {
+function CodeBlock({
+	label,
+	text,
+	language = "json",
+}: {
+	label: string;
+	text: string;
+	language?: "json" | "text";
+}) {
 	const [expanded, setExpanded] = useState(false);
 	const cut = !expanded && text.length > RESPONSE_PREVIEW_CHARS;
+	const shown = cut ? `${text.slice(0, RESPONSE_PREVIEW_CHARS)}\n…` : text;
 	return (
 		<div className="space-y-1">
 			<div className="flex items-center justify-between">
@@ -67,7 +101,7 @@ function CodeBlock({ label, text }: { label: string; text: string }) {
 				<CopyButton text={text} />
 			</div>
 			<pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted/60 p-2 font-mono text-[11px] leading-relaxed">
-				{cut ? `${text.slice(0, RESPONSE_PREVIEW_CHARS)}\n…` : text}
+				{language === "json" ? <JsonHighlight text={shown} /> : shown}
 			</pre>
 			{text.length > RESPONSE_PREVIEW_CHARS ? (
 				<button
@@ -113,11 +147,17 @@ function TraceCallRow({ call, index }: { call: TraceCall; index: number }) {
 		[part.toolName, part.input],
 	);
 	const response = useMemo(() => {
-		if (part.errorText) return redactSecrets(part.errorText);
-		if (part.output === undefined) return "";
-		return redactSecrets(prettyJson(unwrapMcpOutput(part.output)));
+		if (part.errorText) {
+			return { text: redactSecrets(part.errorText), json: false };
+		}
+		if (part.output === undefined) return { text: "", json: false };
+		const value = unwrapMcpOutput(part.output);
+		return {
+			text: redactSecrets(prettyJson(value)),
+			json: typeof value !== "string",
+		};
 	}, [part.output, part.errorText]);
-	const sources = useMemo(() => extractSourceLinks(response), [response]);
+	const sources = useMemo(() => extractSourceLinks(response.text), [response]);
 
 	return (
 		<details className="group border-border border-b last:border-b-0">
@@ -156,7 +196,13 @@ function TraceCallRow({ call, index }: { call: TraceCall; index: number }) {
 			</summary>
 			<div className="space-y-3 px-3 pt-1 pb-3 pl-10">
 				<CodeBlock label="Request · JSON-RPC" text={request} />
-				{response ? <CodeBlock label="Response" text={response} /> : null}
+				{response.text ? (
+					<CodeBlock
+						label="Response"
+						language={response.json ? "json" : "text"}
+						text={response.text}
+					/>
+				) : null}
 				{sources.length > 0 ? (
 					<div className="space-y-1">
 						<p className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -274,9 +320,10 @@ export function TracePanel({
 					<X className="size-4" />
 				</Button>
 			</div>
-			<ScrollArea className="min-h-0 flex-1">
+			{/* Native scrolling so a long trace always reaches its last call. */}
+			<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
 				<TracePanelContent messages={messages} />
-			</ScrollArea>
+			</div>
 			<p className="shrink-0 border-border border-t px-4 py-2 text-[10px] text-muted-foreground">
 				Timings are measured on the app server around each MCP call. API keys
 				are hidden.
